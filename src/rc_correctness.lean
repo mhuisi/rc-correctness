@@ -26,6 +26,31 @@ inductive fn_body : Type
 | inc : var → fn_body → fn_body
 | dec : var → fn_body → fn_body
 
+-- is there a better way? i couldn't find a coercion in the stdlib.
+universe u
+def list_to_set {α : Type u} : list α → set α
+| [] := {}
+| (x :: xs) := (list_to_set xs).insert x
+
+-- :(
+def set_to_list {α : Type u} : set α → list α := sorry
+
+def FV_expr : expr → set var
+| (expr.const_app_full _ xs) := list_to_set xs
+| (expr.const_app_part c xs) := list_to_set xs
+| (expr.var_app x y) := {x, y}
+| (expr.ctor_app ⟨i, xs⟩) := list_to_set xs
+| (expr.proj c x) := {x}
+| (expr.reset x) := {x}
+| (expr.reuse x ⟨i, xs⟩) := list_to_set (xs.insert x)
+
+def FV : fn_body → set var
+| (fn_body.return x) := {x}
+| (fn_body.let x e F) := FV_expr e ∪ (FV F \ {x})
+| (fn_body.case x Fs) := (Fs.map (λ F, FV F)).foldr (∪) {} -- how do we tell lean that this terminates?
+| (fn_body.inc x F) := {x} ∪ FV F
+| (fn_body.dec x F) := {x} ∪ FV F
+
 structure fn := (yc : list var) (F : fn_body)
 
 inductive rc : Type
@@ -137,5 +162,61 @@ notation Γ ` ⊩ `:1 t := linear Γ t
 | proj_own (Γ : type_context) (x y : var) (F : fn_body) (i : ctor) :
     (Γ ⊪ [x ∶ 𝕆, y ∶ 𝕆]) → (Γ ⊩ F ∷ 𝕆)
     → (Γ - [y ∶ 𝕆] ⊩ fn_body.«let» y (expr.proj i x) (fn_body.inc y F) ∷ 𝕆)
+
+def 𝕆plus (x : var) (V : set var) (F : fn_body) (βₗ : var → ob_lin_type) : fn_body :=
+if βₗ x = ob_lin_type.𝕆 ∧ x ∉ V then F else fn_body.inc x F -- no decidable mem for set :(
+
+def 𝕆minus_var (x : var) (F : fn_body) (βₗ : var → ob_lin_type) : fn_body :=
+if βₗ x = ob_lin_type.𝕆 ∧ x ∉ FV F then fn_body.dec x F else F -- no decidable mem for set :(
+
+def 𝕆minus : list var → fn_body → (var → ob_lin_type) → fn_body
+| [] F βₗ := F
+| (x :: xs) F βₗ := 𝕆minus xs (𝕆minus_var x F βₗ) βₗ
+
+def fn_update {α : Type u} {β : Type u} [decidable_eq α] (f : α → β) (a : α) (b : β) : α → β :=
+    λ x, if x = a then b else f x
+
+notation f `[` a `↦` b `]` := fn_update f a b 
+
+def Capp : list (var × ob_lin_type) → fn_body → (var → ob_lin_type) → fn_body
+| [] (fn_body.let z e F) βₗ := fn_body.let z e F
+| ((y, ob_lin_type.𝕆)::xs) (fn_body.let z e F) βₗ := 
+    let ys := xs.map (λ ⟨x, b⟩, x) in 
+    𝕆plus y (list_to_set ys ∪ FV F) (Capp xs (fn_body.let z e F) βₗ) βₗ -- typo in the paper!
+| ((y, ob_lin_type.𝔹)::xs) (fn_body.let z e F) βₗ :=
+    Capp xs (fn_body.let z e (𝕆minus_var y F βₗ)) βₗ
+| xs F βₗ := F
+
+def C (β : const → list ob_lin_type) : fn_body → (var → ob_lin_type) → fn_body
+| (fn_body.return x) βₗ := 𝕆plus x {} (fn_body.return x) βₗ
+| (fn_body.case x Fs) βₗ := let ys := FV (fn_body.case x Fs) in 
+    fn_body.case x (Fs.map (λ F, 𝕆minus (set_to_list ys) (C F βₗ) βₗ)) -- how do we tell lean that this terminates?
+| (fn_body.let y (expr.proj i x) F) βₗ := 
+    if βₗ x = ob_lin_type.𝕆 then
+        fn_body.let y (expr.proj i x) (fn_body.inc y (𝕆minus_var x (C F βₗ) βₗ))
+    else
+        fn_body.let y (expr.proj i x) (C F (βₗ[y ↦ ob_lin_type.𝔹]))
+| (fn_body.let y (expr.reset x) F) βₗ := fn_body.let y (expr.reset x) (C F βₗ)
+| (fn_body.let z (expr.const_app_full c ys) F) βₗ := Capp (ys.zip (β c)) (fn_body.let z (expr.const_app_full c ys) (C F βₗ)) βₗ
+| (fn_body.let z (expr.const_app_part c ys) F) βₗ := 
+    Capp (ys.map (λ y, ⟨y, ob_lin_type.𝕆⟩)) (fn_body.let z (expr.const_app_part c ys) (C F βₗ)) βₗ
+    -- here we ignore the first case to avoid proving non-termination. so far this should be equivalent, it may however cause issues down the road!
+| (fn_body.let z (expr.var_app x y) F) βₗ := 
+    Capp ([⟨x, ob_lin_type.𝕆⟩, ⟨y, ob_lin_type.𝕆⟩]) (fn_body.let z (expr.var_app x y) (C F βₗ)) βₗ   
+| (fn_body.let z (expr.ctor_app ⟨i, ys⟩) F) βₗ :=
+    Capp (ys.map (λ y, ⟨y, ob_lin_type.𝕆⟩)) (fn_body.let z (expr.ctor_app ⟨i, ys⟩) (C F βₗ)) βₗ
+| (fn_body.let z (expr.reuse x ⟨i, ys⟩) F) βₗ :=
+    Capp (ys.map (λ y, ⟨y, ob_lin_type.𝕆⟩)) (fn_body.let z (expr.reuse x ⟨i, ys⟩) (C F βₗ)) βₗ
+| F βₗ := F
+
+def erase_rc : fn_body → fn_body
+| (fn_body.let _ (expr.reset _) F) := erase_rc F
+| (fn_body.let z (expr.reuse x cta) F) := fn_body.let z (expr.ctor_app cta) (erase_rc F)
+| (fn_body.let x e F) := fn_body.let x e (erase_rc F)
+| (fn_body.inc _ F) := erase_rc F
+| (fn_body.dec _ F) := erase_rc F
+| (fn_body.case x cases) := fn_body.case x (cases.map (λ c, erase_rc c)) -- how do we tell lean that this terminates?
+| (fn_body.return x) := fn_body.return x 
+
 
 end rc_correctness
