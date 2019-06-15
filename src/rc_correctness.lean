@@ -70,6 +70,17 @@ instance fn_body_to_rc : has_coe fn_body rc := ⟨rc.fn_body⟩
 
 instance fn_to_rc : has_coe fn rc := ⟨rc.fn⟩ 
 
+def erase_rc_fn_body : fn_body → fn_body
+| (fn_body.let _ (expr.reset _) F) := erase_rc_fn_body F
+| (fn_body.let z (expr.reuse x cta) F) := fn_body.let z (expr.ctor_app cta) (erase_rc_fn_body F)
+| (fn_body.let x e F) := fn_body.let x e (erase_rc_fn_body F)
+| (fn_body.inc _ F) := erase_rc_fn_body F
+| (fn_body.dec _ F) := erase_rc_fn_body F
+| (fn_body.case x cases) := fn_body.case x (cases.map (λ c, erase_rc_fn_body c)) -- how do we tell lean that this terminates?
+| (fn_body.return x) := fn_body.return x 
+
+def erase_rc_fn (f : fn) : fn := ⟨f.yc, erase_rc_fn_body f.F⟩ 
+
 @[derive decidable_eq]
 inductive lin_type : Type 
     | 𝕆 | 𝔹 | ℝ
@@ -102,7 +113,7 @@ notation Γ ` ⊪ `:1 xs := ↑xs ≤ Γ
 
 structure param_typing := (Γ : type_context) (x : var) (β : ob_lin_type)
 
-inductive linear : type_context → typed_rc → Type
+inductive linear : type_context → typed_rc → Prop
 notation Γ ` ⊩ `:1 t := linear Γ t
 | var (x : var) (τ : lin_type) : 
     [x ∶ τ] ⊩ x ∷ τ
@@ -152,16 +163,26 @@ notation Γ ` ⊩ `:1 t := linear Γ t
     [x ∶ ℝ] + (ys [∶] 𝕆) ⊩ expr.reuse x ⟨i, ys⟩ ∷ 𝕆
 | let_o (Γ : type_context) (xs : list var) (e : expr) (Δ : type_context) (z : var) (F : fn_body) :
     (Γ ⊪ xs [∶] 𝔹) → (Γ ⊩ e ∷ 𝕆) → (Δ ⊪ (xs [∶] 𝕆) ++ [z ∶ 𝕆]) → (Δ ⊩ F ∷ 𝕆)
-    → (Γ - (xs [∶] 𝔹) + Δ - [z ∶ 𝕆] ⊩ fn_body.«let» z e F ∷ 𝕆)
+    → (Γ - (xs [∶] 𝔹) + Δ - [z ∶ 𝕆] ⊩ fn_body.let z e F ∷ 𝕆)
 | let_r (Γ : type_context) (xs : list var) (e : expr) (Δ : type_context) (z : var) (F : fn_body) :
     (Γ ⊪ xs [∶] 𝔹) → (Γ ⊩ e ∷ 𝕆) → (Δ ⊪ (xs [∶] 𝕆) ++ [z ∶ ℝ]) → (Δ ⊩ F ∷ 𝕆)
-    → (Γ - (xs [∶] 𝔹) + Δ - [z ∶ ℝ] ⊩ fn_body.«let» z e F ∷ 𝕆)
+    → (Γ - (xs [∶] 𝔹) + Δ - [z ∶ ℝ] ⊩ fn_body.let z e F ∷ 𝕆)
 | proj_bor (Γ : type_context) (x y : var) (F : fn_body) (i : ctor) :
     (Γ ⊪ [x ∶ 𝔹, y ∶ 𝔹]) → (Γ ⊩ F ∷ 𝕆)
-    → (Γ - [y ∶ 𝔹] ⊩ fn_body.«let» y (expr.proj i x) F ∷ 𝕆)
+    → (Γ - [y ∶ 𝔹] ⊩ fn_body.let y (expr.proj i x) F ∷ 𝕆)
 | proj_own (Γ : type_context) (x y : var) (F : fn_body) (i : ctor) :
     (Γ ⊪ [x ∶ 𝕆, y ∶ 𝕆]) → (Γ ⊩ F ∷ 𝕆)
-    → (Γ - [y ∶ 𝕆] ⊩ fn_body.«let» y (expr.proj i x) (fn_body.inc y F) ∷ 𝕆)
+    → (Γ - [y ∶ 𝕆] ⊩ fn_body.let y (expr.proj i x) (fn_body.inc y F) ∷ 𝕆)
+
+inductive linear_const : (const → fn) → const → Prop
+| const (δ : const → fn) (c : const) (βs : list ob_lin_type) :
+    (linear ((δ c).yc.zip_with (∶) ↑βs) ((δ c).F ∷ 𝕆))
+    → (linear_const δ c)
+
+inductive linear_program : (const → fn) → Prop
+| program (δᵣ : const → fn) (δ : const → fn) :
+    (∀ c : const, δᵣ c = erase_rc_fn (δ c) ∧ linear_const δᵣ c)
+    → (linear_program δᵣ)
 
 def 𝕆plus (x : var) (V : set var) (F : fn_body) (βₗ : var → ob_lin_type) : fn_body :=
 if βₗ x = ob_lin_type.𝕆 ∧ x ∉ V then F else fn_body.inc x F -- no decidable mem for set :(
@@ -209,16 +230,7 @@ def C (β : const → list ob_lin_type) : fn_body → (var → ob_lin_type) → 
     Capp (ys.map (λ y, ⟨y, ob_lin_type.𝕆⟩)) (fn_body.let z (expr.reuse x ⟨i, ys⟩) (C F βₗ)) βₗ
 | F βₗ := F
 
-def erase_rc : fn_body → fn_body
-| (fn_body.let _ (expr.reset _) F) := erase_rc F
-| (fn_body.let z (expr.reuse x cta) F) := fn_body.let z (expr.ctor_app cta) (erase_rc F)
-| (fn_body.let x e F) := fn_body.let x e (erase_rc F)
-| (fn_body.inc _ F) := erase_rc F
-| (fn_body.dec _ F) := erase_rc F
-| (fn_body.case x cases) := fn_body.case x (cases.map (λ c, erase_rc c)) -- how do we tell lean that this terminates?
-| (fn_body.return x) := fn_body.return x 
-
-inductive expr_wf : set var → expr → Type
+inductive expr_wf : set var → expr → Prop
 notation Γ ` ⊩ `:1 e := expr_wf Γ e
 | const_app_full (δ : const → fn) (Γ : set var) (ys : list var) (c : const) :
     (list_to_set ys ⊂ Γ) → (ys.length = (δ c).yc.length)
@@ -242,7 +254,7 @@ notation Γ ` ⊩ `:1 e := expr_wf Γ e
     ({x} ∪ list_to_set c.v ⊂ Γ)
     → (Γ ⊩ expr.reuse x c)
 
-inductive fn_body_wf : set var → fn_body → Type
+inductive fn_body_wf : set var → fn_body → Prop
 notation Γ ` ⊩ `:1 f := fn_body_wf Γ f
 | return (Γ : set var) (x : var) : (Γ ⊩ fn_body.return x) -- error in the paper: what is well-formedness of variables?
 | «let» (Γ : set var) (z : var) (e : expr) (F : fn_body) (xs : list var) :
@@ -252,10 +264,10 @@ notation Γ ` ⊩ `:1 f := fn_body_wf Γ f
     ({x} ⊂ Γ) → (∀ F ∈ Fs, Γ ⊩ F)
     → (Γ ⊩ fn_body.case x Fs)
 
-inductive fn_wf : fn → Type
+inductive fn_wf : fn → Prop
 | fn (f : fn) : (fn_body_wf (list_to_set f.yc) f.F) → fn_wf f
 
-inductive const_wf : (const → fn) → const → Type
+inductive const_wf : (const → fn) → const → Prop
 | const (δ : const → fn) (c : const) : (fn_wf (δ c)) → const_wf δ c
 
 end rc_correctness
