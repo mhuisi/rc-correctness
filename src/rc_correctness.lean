@@ -270,4 +270,37 @@ inductive fn_wf : fn → Prop
 inductive const_wf : (const → fn) → const → Prop
 | const (δ : const → fn) (c : const) : (fn_wf (δ c)) → const_wf δ c
 
+inductive reuse_fn_body_wf : set var → fn_body → Prop
+notation Γ ` ⊩ `:1 f := reuse_fn_body_wf Γ f
+| return (Γ : set var) (x : var) : Γ ⊩ fn_body.return x
+| let_reset (Γ : set var) (z x : var) (F : fn_body) :
+    ({z} ⊂ Γ) → (Γ ⊩ F)
+    → (Γ ⊩ fn_body.let z (expr.reset x) F)
+| let_reuse (Γ : set var) (z x : var) (F : fn_body) (c : ctor_app) :
+    (Γ ⊩ F)
+    → (Γ ∪ {x} ⊩ fn_body.let z (expr.reuse x c) F)
+| let_const_app_full (Γ : set var) (F : fn_body) (z : var) (c : const) (ys : list var) :
+    (Γ ⊩ F)
+    → (Γ ⊩ fn_body.let z (expr.const_app_full c ys) F)
+| let_const_app_part (Γ : set var) (F : fn_body) (z : var) (c : const) (ys : list var) :
+    (Γ ⊩ F)
+    → (Γ ⊩ fn_body.let z (expr.const_app_part c ys) F)
+| let_var_app (Γ : set var) (F : fn_body) (z x y : var) :
+    (Γ ⊩ F)
+    → (Γ ⊩ fn_body.let z (expr.var_app x y) F)
+| let_ctor_app (Γ : set var) (F : fn_body) (z : var) (c : ctor_app) :
+    (Γ ⊩ F)
+    → (Γ ⊩ fn_body.let z (expr.ctor_app c) F)
+| let_proj (Γ : set var) (F : fn_body) (z x : var) (i : ctor) :
+    (Γ ⊩ F)
+    → (Γ ⊩ fn_body.let z (expr.proj i x) F)
+| case (Γ : set var) (x : var) (Fs : list fn_body) :
+    (∀ F ∈ Fs, Γ ⊩ F)
+    → (Γ ⊩ fn_body.case x Fs)
+
+inductive reuse_const_wf : (const → fn) → const → Prop
+| const (δ : const → fn) (c : const) :
+    (reuse_fn_body_wf {} (δ c).F)
+    → reuse_const_wf δ c
+
 end rc_correctness
