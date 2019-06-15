@@ -218,5 +218,44 @@ def erase_rc : fn_body → fn_body
 | (fn_body.case x cases) := fn_body.case x (cases.map (λ c, erase_rc c)) -- how do we tell lean that this terminates?
 | (fn_body.return x) := fn_body.return x 
 
+inductive expr_wf : set var → expr → Type
+notation Γ ` ⊩ `:1 e := expr_wf Γ e
+| const_app_full (δ : const → fn) (Γ : set var) (ys : list var) (c : const) :
+    (list_to_set ys ⊂ Γ) → (ys.length = (δ c).yc.length)
+    → (Γ ⊩ expr.const_app_full c ys)
+| const_app_part (Γ : set var) (c : const) (ys : list var) :
+    (list_to_set ys ⊂ Γ)
+    → (Γ ⊩ expr.const_app_part c ys)
+| var_app (Γ : set var) (x y : var) :
+    ({x, y} ⊂ Γ)
+    → (Γ ⊩ expr.var_app x y)
+| ctor_app (Γ : set var) (c : ctor_app) : 
+    (list_to_set c.v ⊂ Γ)
+    → (Γ ⊩ expr.ctor_app c)
+| proj (Γ : set var) (x : var) (i : ctor) : 
+    ({x} ⊂ Γ)
+    → (Γ ⊩ expr.proj i x)
+| reset (Γ : set var) (x : var) :
+    ({x} ⊂ Γ)
+    → (Γ ⊩ expr.reset x)
+| reuse (Γ : set var) (x : var) (c : ctor_app) :
+    ({x} ∪ list_to_set c.v ⊂ Γ)
+    → (Γ ⊩ expr.reuse x c)
+
+inductive fn_body_wf : set var → fn_body → Type
+notation Γ ` ⊩ `:1 f := fn_body_wf Γ f
+| return (Γ : set var) (x : var) : (Γ ⊩ fn_body.return x) -- error in the paper: what is well-formedness of variables?
+| «let» (Γ : set var) (z : var) (e : expr) (F : fn_body) (xs : list var) :
+    (expr_wf Γ e) → (z ∈ FV F) → (z ∉ Γ) → (Γ ∪ {z} ⊩ F)
+    → (Γ ∪ list_to_set xs ⊩ fn_body.let z e F) -- what is xs? how do i use the expr_wf notation?
+| case (Γ : set var) (x : var) (Fs : list fn_body):
+    ({x} ⊂ Γ) → (∀ F ∈ Fs, Γ ⊩ F)
+    → (Γ ⊩ fn_body.case x Fs)
+
+inductive fn_wf : fn → Type
+| fn (f : fn) : (fn_body_wf (list_to_set f.yc) f.F) → fn_wf f
+
+inductive const_wf : (const → fn) → const → Type
+| const (δ : const → fn) (c : const) : (fn_wf (δ c)) → const_wf δ c
 
 end rc_correctness
