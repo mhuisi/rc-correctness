@@ -250,7 +250,7 @@ def C (β : const → list ob_lin_type) : fn_body → (var → ob_lin_type) → 
 | (fn_body.let y (expr.reset x) F) βₗ := fn_body.let y (expr.reset x) (C F βₗ)
 | (fn_body.let z (expr.const_app_full c ys) F) βₗ := Capp (ys.zip (β c)) (fn_body.let z (expr.const_app_full c ys) (C F βₗ)) βₗ
 | (fn_body.let z (expr.const_app_part c ys) F) βₗ := 
-    Capp (ys.map (λ y, ⟨y, ⟨𝕆, or.inl rfl⟩⟩)) (fn_body.let z (expr.const_app_part c ys) (C F βₗ)) βₗ
+    Capp (ys.map (λ y, ⟨y, 𝕆⟩)) (fn_body.let z (expr.const_app_part c ys) (C F βₗ)) βₗ
     -- here we ignore the first case to avoid proving non-termination. so far this should be equivalent, it may however cause issues down the road!
 | (fn_body.let z (expr.var_app x y) F) βₗ := 
     Capp ([⟨x, 𝕆⟩, ⟨y, 𝕆⟩]) (fn_body.let z (expr.var_app x y) (C F βₗ)) βₗ   
