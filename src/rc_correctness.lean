@@ -1,5 +1,31 @@
 import data.multiset
 
+namespace list
+open well_founded_tactics
+
+-- sizeof_lt_sizeof_of_mem, map_wf, map_wf_eq_map & fn_body.rec_wf courtesy of Sebastian Ullrich
+lemma sizeof_lt_sizeof_of_mem {α} [has_sizeof α] {a : α} : ∀ {l : list α}, a ∈ l → sizeof a < sizeof l
+| []      h := absurd h (not_mem_nil _)
+| (b::bs) h :=
+  begin
+    cases eq_or_mem_of_mem_cons h with h_1 h_2,
+    subst h_1,
+    {unfold_sizeof, cancel_nat_add_lt, trivial_nat_lt},
+    {have aux₁ := sizeof_lt_sizeof_of_mem h_2,
+     unfold_sizeof,
+     exact nat.lt_add_left _ _ _ (nat.lt_add_left _ _ _ aux₁)}
+  end
+
+def map_wf {α β : Type*} [has_sizeof α] (xs : list α) (f : Π (a : α), (sizeof a < 1 + sizeof xs) → β) : list β :=
+xs.attach.map (λ p,
+  have sizeof p.val < 1 + sizeof xs, from nat.lt_add_left _ _ _ (list.sizeof_lt_sizeof_of_mem p.property),
+  f p.val this)
+
+lemma map_wf_eq_map {α β : Type*} [has_sizeof α] {xs : list α} {f : α → β} :
+  map_wf xs (λ a _, f a) = map f xs :=
+by simp [map_wf, attach, map_pmap, pmap_eq_map]
+end list
+
 namespace rc_correctness
 
 def var := ℕ
@@ -8,50 +34,53 @@ def const := ℕ
 
 def ctor := ℕ
 
-structure ctor_app := (i : ctor) (v : list var)
-
 inductive expr : Type
-| const_app_full : const → list var → expr
-| const_app_part : const → list var → expr
-| var_app : var → var → expr
-| ctor_app : ctor_app → expr
-| proj : ctor → var → expr
-| reset : var → expr
-| reuse : var → ctor_app → expr
+| const_app_full (c : const) (ys : list var) : expr
+| const_app_part (c : const) (ys : list var) : expr
+| var_app (x : var) (y : var) : expr
+| ctor_app (i : ctor) (ys : list var) : expr
+| proj (i : ctor) (x : var) : expr
+| reset (x : var) : expr
+| reuse (x : var) (i : ctor) (ys : list var) : expr
 
 inductive fn_body : Type
-| return : var → fn_body 
-| «let» : var → expr → fn_body → fn_body
-| case : var → list fn_body → fn_body
-| inc : var → fn_body → fn_body
-| dec : var → fn_body → fn_body
+| return (x : var) : fn_body 
+| «let» (x : var) (e : expr) (F : fn_body) : fn_body
+| case (x : var) (Fs : list fn_body) : fn_body
+| inc (x : var) (F : fn_body) : fn_body
+| dec (x : var) (F : fn_body) : fn_body
 
--- is there a better way? i couldn't find a coercion in the stdlib.
-universe u
-def list_to_set {α : Type u} : list α → set α
-| [] := {}
-| (x :: xs) := (list_to_set xs).insert x
+def {l} fn_body.rec_wf (C : fn_body → Sort l)
+  (return : Π (x : var), C (fn_body.return x))
+  («let» : Π (x : var) (e : expr) (F : fn_body) (F_ih : C F), C (fn_body.let x e F))
+  (case : Π (x : var) (Fs : list fn_body) (Fs_ih : ∀ F ∈ Fs, C F), C (fn_body.case x Fs))
+  (inc : Π (x : var) (F : fn_body) (F_ih : C F), C (fn_body.inc x F))
+  (dec : Π (x : var) (F : fn_body) (F_ih : C F), C (fn_body.dec x F)) : Π (x : fn_body), C x
+| (fn_body.return a) := return a
+| (fn_body.let x a a_1) := «let» x a a_1 (fn_body.rec_wf a_1)
+| (fn_body.case a a_1) := case a a_1 (λ a h,
+  have sizeof a < 1 + sizeof a_1, from nat.lt_add_left _ _ _ (list.sizeof_lt_sizeof_of_mem h),
+  fn_body.rec_wf a)
+| (fn_body.inc a a_1) := inc a a_1 (fn_body.rec_wf a_1)
+| (fn_body.dec a a_1) := dec a a_1 (fn_body.rec_wf a_1)
 
--- :(
-def set_to_list {α : Type u} : set α → list α := sorry
+def FV_expr : expr → list var
+| (expr.const_app_full _ xs) := xs
+| (expr.const_app_part c xs) := xs
+| (expr.var_app x y) := [x, y]
+| (expr.ctor_app i xs) := xs
+| (expr.proj c x) := [x]
+| (expr.reset x) := [x]
+| (expr.reuse x i xs) := xs ∪ [x]
 
-def FV_expr : expr → set var
-| (expr.const_app_full _ xs) := list_to_set xs
-| (expr.const_app_part c xs) := list_to_set xs
-| (expr.var_app x y) := {x, y}
-| (expr.ctor_app ⟨i, xs⟩) := list_to_set xs
-| (expr.proj c x) := {x}
-| (expr.reset x) := {x}
-| (expr.reuse x ⟨i, xs⟩) := list_to_set (xs.insert x)
+def FV : fn_body → list var
+| (fn_body.return x) := [x]
+| (fn_body.let x e F) := FV_expr e ∪ (FV F).erase x
+| (fn_body.case x Fs) := (Fs.map_wf (λ F h, FV F)).foldr (∪) []
+| (fn_body.inc x F) := FV F ∪ [x]
+| (fn_body.dec x F) := FV F ∪ [x]
 
-def FV : fn_body → set var
-| (fn_body.return x) := {x}
-| (fn_body.let x e F) := FV_expr e ∪ (FV F \ {x})
-| (fn_body.case x Fs) := (Fs.map (λ F, FV F)).foldr (∪) {} -- how do we tell lean that this terminates?
-| (fn_body.inc x F) := {x} ∪ FV F
-| (fn_body.dec x F) := {x} ∪ FV F
-
-structure fn := (yc : list var) (F : fn_body)
+structure fn := (ys : list var) (F : fn_body)
 
 inductive rc : Type
 | var : var → rc
@@ -72,36 +101,28 @@ instance fn_to_rc : has_coe fn rc := ⟨rc.fn⟩
 
 def erase_rc_fn_body : fn_body → fn_body
 | (fn_body.let _ (expr.reset _) F) := erase_rc_fn_body F
-| (fn_body.let z (expr.reuse x cta) F) := fn_body.let z (expr.ctor_app cta) (erase_rc_fn_body F)
+| (fn_body.let z (expr.reuse x i ys) F) := fn_body.let z (expr.ctor_app i ys) (erase_rc_fn_body F)
 | (fn_body.let x e F) := fn_body.let x e (erase_rc_fn_body F)
 | (fn_body.inc _ F) := erase_rc_fn_body F
 | (fn_body.dec _ F) := erase_rc_fn_body F
-| (fn_body.case x cases) := fn_body.case x (cases.map (λ c, erase_rc_fn_body c)) -- how do we tell lean that this terminates?
+| (fn_body.case x cases) := fn_body.case x (cases.map_wf (λ c h, erase_rc_fn_body c))
 | (fn_body.return x) := fn_body.return x 
 
-def erase_rc_fn (f : fn) : fn := ⟨f.yc, erase_rc_fn_body f.F⟩ 
+def erase_rc_fn (f : fn) : fn := ⟨f.ys, erase_rc_fn_body f.F⟩ 
 
 @[derive decidable_eq]
 inductive lin_type : Type 
     | 𝕆 | 𝔹 | ℝ
 
-@[derive decidable_eq]
-inductive ob_lin_type : Type
-    | 𝕆 | 𝔹
+abbreviation ob_lin_type := {x : lin_type // x = lin_type.𝕆 ∨ x = lin_type.𝔹}
 
-instance ob_lin_type_to_lin_type : has_coe ob_lin_type lin_type := ⟨λ oblt, 
-    match oblt with
-    | ob_lin_type.𝕆 := lin_type.𝕆
-    | ob_lin_type.𝔹 := lin_type.𝔹
-    end⟩ 
-
-open lin_type
+def 𝕆 : ob_lin_type := ⟨lin_type.𝕆, or.inl rfl⟩ 
+def 𝔹 : ob_lin_type := ⟨lin_type.𝔹, or.inr rfl⟩ 
 
 structure typed_rc := (c : rc) (ty : lin_type)
 
+@[derive decidable_eq]
 structure typed_var := (x : var) (ty : lin_type)
-
-instance typed_var_eq : decidable_eq typed_var := by tactic.mk_dec_eq_instance
 
 notation x ` ∶ `:2 τ := typed_var.mk x τ
 notation xs ` [∶] `:2 τ := xs.map (∶ τ)
@@ -109,9 +130,9 @@ notation c ` ∷ `:2 τ := typed_rc.mk c τ
 
 abbreviation type_context := multiset typed_var
 
-notation Γ ` ⊪ `:1 xs := ↑xs ≤ Γ
-
 structure param_typing := (Γ : type_context) (x : var) (β : ob_lin_type)
+
+open lin_type
 
 inductive linear : type_context → typed_rc → Prop
 notation Γ ` ⊩ `:1 t := linear Γ t
@@ -121,14 +142,14 @@ notation Γ ` ⊩ `:1 t := linear Γ t
     (Γ ⊩ t) 
     → (Γ + [x ∶ 𝔹] ⊩ t)
 | contract (Γ : type_context) (x : var) (t : typed_rc) :
-    (Γ ⊪ [x ∶ 𝔹, x ∶ 𝔹]) → (Γ ⊩ t)
-    → (Γ - [x ∶ 𝔹] ⊩ t)
+    (Γ + [x ∶ 𝔹, x ∶ 𝔹] ⊩ t)
+    → (Γ + [x ∶ 𝔹] ⊩ t)
 | inc_o (Γ : type_context) (x : var) (F : fn_body) :
-    (Γ ⊪ [x ∶ 𝕆, x ∶ 𝕆]) → (Γ ⊩ F ∷ 𝕆)
-    → (Γ - [x ∶ 𝕆] ⊩ fn_body.inc x F ∷ 𝕆)
+    (Γ + [x ∶ 𝕆, x ∶ 𝕆] ⊩ F ∷ 𝕆)
+    → (Γ + [x ∶ 𝕆] ⊩ fn_body.inc x F ∷ 𝕆)
 | inc_b (Γ : type_context) (x : var) (F : fn_body) :
-    (Γ ⊪ [x ∶ 𝔹, x ∶ 𝕆]) → (Γ ⊩ F ∷ 𝕆)
-    → (Γ - [x ∶ 𝕆] ⊩ fn_body.inc x F ∷ 𝕆)
+    (Γ + [x ∶ 𝔹, x ∶ 𝕆] ⊩ F ∷ 𝕆)
+    → (Γ + [x ∶ 𝔹] ⊩ fn_body.inc x F ∷ 𝕆)
 | dec_o (Γ : type_context) (x : var) (F : fn_body) :
     (Γ ⊩ F ∷ 𝕆)
     → (Γ + [x ∶ 𝕆] ⊩ fn_body.dec x F ∷ 𝕆)
@@ -139,11 +160,11 @@ notation Γ ` ⊩ `:1 t := linear Γ t
     (Γ ⊩ x ∷ 𝕆)
     → (Γ ⊩ fn_body.return x ∷ 𝕆)
 | case_o (Γ : type_context) (x : var) (Fs : list fn_body) :
-    (Γ ⊪ [x ∶ 𝕆]) → (∀ F ∈ Fs, Γ ⊩ ↑F ∷ 𝕆)
-    → (Γ ⊩ fn_body.case x Fs ∷ 𝕆)
+    (∀ F ∈ Fs, Γ + [x ∶ 𝕆] ⊩ ↑F ∷ 𝕆)
+    → (Γ + [x ∶ 𝕆] ⊩ fn_body.case x Fs ∷ 𝕆)
 | case_b (Γ : type_context) (x : var) (Fs : list fn_body) :
-    (Γ ⊪ [x ∶ 𝔹]) → (∀ F ∈ Fs, Γ ⊩ ↑F ∷ 𝕆)
-    → (Γ ⊩ fn_body.case x Fs ∷ 𝕆)
+    (∀ F ∈ Fs, Γ + [x ∶ 𝔹] ⊩ ↑F ∷ 𝕆)
+    → (Γ + [x ∶ 𝔹] ⊩ fn_body.case x Fs ∷ 𝕆)
 -- the app rules may need to get revamped down the road 
 -- (properly modelling β may prove to be difficult, and right now there are no restrictions on β).
 -- the current app rules are merely placeholders, for now. 
@@ -156,151 +177,176 @@ notation Γ ` ⊩ `:1 t := linear Γ t
 | var_app (x y : var) :
     [x ∶ 𝕆, y ∶ 𝕆] ⊩ expr.var_app x y ∷ 𝕆
 | cnstr_app (ys : list var) (i : ctor) :
-    ys [∶] 𝕆 ⊩ expr.ctor_app ⟨i, ys⟩ ∷ 𝕆
+    ys [∶] 𝕆 ⊩ expr.ctor_app i ys ∷ 𝕆
 | reset (x : var) :
     [x ∶ 𝕆] ⊩ expr.reset x ∷ ℝ
 | reuse (x : var) (ys : list var) (i : ctor) :
-    [x ∶ ℝ] + (ys [∶] 𝕆) ⊩ expr.reuse x ⟨i, ys⟩ ∷ 𝕆
+    [x ∶ ℝ] + (ys [∶] 𝕆) ⊩ expr.reuse x i ys ∷ 𝕆
 | let_o (Γ : type_context) (xs : list var) (e : expr) (Δ : type_context) (z : var) (F : fn_body) :
-    (Γ ⊪ xs [∶] 𝔹) → (Γ ⊩ e ∷ 𝕆) → (Δ ⊪ (xs [∶] 𝕆) ++ [z ∶ 𝕆]) → (Δ ⊩ F ∷ 𝕆)
-    → (Γ - (xs [∶] 𝔹) + Δ - [z ∶ 𝕆] ⊩ fn_body.let z e F ∷ 𝕆)
+    (Γ + (xs [∶] 𝔹) ⊩ e ∷ 𝕆) → (Δ + (xs [∶] 𝕆) + [z ∶ 𝕆] ⊩ F ∷ 𝕆)
+    → (Γ + Δ + (xs [∶] 𝕆) ⊩ fn_body.let z e F ∷ 𝕆)
 | let_r (Γ : type_context) (xs : list var) (e : expr) (Δ : type_context) (z : var) (F : fn_body) :
-    (Γ ⊪ xs [∶] 𝔹) → (Γ ⊩ e ∷ 𝕆) → (Δ ⊪ (xs [∶] 𝕆) ++ [z ∶ ℝ]) → (Δ ⊩ F ∷ 𝕆)
-    → (Γ - (xs [∶] 𝔹) + Δ - [z ∶ ℝ] ⊩ fn_body.let z e F ∷ 𝕆)
+    (Γ + (xs [∶] 𝔹) ⊩ e ∷ 𝕆) → (Δ + (xs [∶] 𝕆) + [z ∶ ℝ] ⊩ F ∷ 𝕆)
+    → (Γ + Δ + (xs [∶] 𝕆) ⊩ fn_body.let z e F ∷ 𝕆)
 | proj_bor (Γ : type_context) (x y : var) (F : fn_body) (i : ctor) :
-    (Γ ⊪ [x ∶ 𝔹, y ∶ 𝔹]) → (Γ ⊩ F ∷ 𝕆)
-    → (Γ - [y ∶ 𝔹] ⊩ fn_body.let y (expr.proj i x) F ∷ 𝕆)
+    (Γ + [x ∶ 𝔹, y ∶ 𝔹] ⊩ F ∷ 𝕆)
+    → (Γ + [x ∶ 𝔹] ⊩ fn_body.let y (expr.proj i x) F ∷ 𝕆)
 | proj_own (Γ : type_context) (x y : var) (F : fn_body) (i : ctor) :
-    (Γ ⊪ [x ∶ 𝕆, y ∶ 𝕆]) → (Γ ⊩ F ∷ 𝕆)
-    → (Γ - [y ∶ 𝕆] ⊩ fn_body.let y (expr.proj i x) (fn_body.inc y F) ∷ 𝕆)
+    (Γ + [x ∶ 𝕆, y ∶ 𝕆] ⊩ F ∷ 𝕆)
+    → (Γ + [x ∶ 𝕆] ⊩ fn_body.let y (expr.proj i x) (fn_body.inc y F) ∷ 𝕆)
 
-inductive linear_const : (const → fn) → const → Prop
-| const (δ : const → fn) (c : const) (βs : list ob_lin_type) :
-    (linear ((δ c).yc.zip_with (∶) ↑βs) ((δ c).F ∷ 𝕆))
-    → (linear_const δ c)
+notation Γ ` ⊩ `:1 t := linear Γ t
 
-inductive linear_program : (const → fn) → Prop
-| program (δᵣ : const → fn) (δ : const → fn) :
-    (∀ c : const, δᵣ c = erase_rc_fn (δ c) ∧ linear_const δᵣ c)
+inductive linear_const (δ : const → fn) : const → Prop
+notation ` ⊩ `:1 c := linear_const c
+| const (c : const) (βs : list ob_lin_type) :
+    ((δ c).ys.zip_with (∶) ↑βs ⊩ (δ c).F ∷ 𝕆)
+    → (⊩ c)
+
+notation δ ` ⊩ `:1 c := linear_const δ c
+
+inductive linear_program (δ : const → fn) : (const → fn) → Prop
+notation ` ⊩ `:1 δ := linear_program δ
+| program (δᵣ : const → fn) :
+    (∀ c : const, δᵣ c = erase_rc_fn (δ c) ∧ (δᵣ ⊩ c))
     → (linear_program δᵣ)
 
-def 𝕆plus (x : var) (V : set var) (F : fn_body) (βₗ : var → ob_lin_type) : fn_body :=
-if βₗ x = ob_lin_type.𝕆 ∧ x ∉ V then F else fn_body.inc x F -- no decidable mem for set :(
+notation δ ` ⊩ `:1 δᵣ := linear_program δ δᵣ
+
+def 𝕆plus (x : var) (V : list var) (F : fn_body) (βₗ : var → ob_lin_type) : fn_body :=
+if βₗ x = 𝕆 ∧ x ∉ V then F else fn_body.inc x F
 
 def 𝕆minus_var (x : var) (F : fn_body) (βₗ : var → ob_lin_type) : fn_body :=
-if βₗ x = ob_lin_type.𝕆 ∧ x ∉ FV F then fn_body.dec x F else F -- no decidable mem for set :(
+if βₗ x = 𝕆 ∧ x ∉ FV F then fn_body.dec x F else F
 
-def 𝕆minus : list var → fn_body → (var → ob_lin_type) → fn_body
+def 𝕆minus : list var → fn_body → (var → ob_lin_type) → fn_body 
 | [] F βₗ := F
 | (x :: xs) F βₗ := 𝕆minus xs (𝕆minus_var x F βₗ) βₗ
 
-def fn_update {α : Type u} {β : Type u} [decidable_eq α] (f : α → β) (a : α) (b : β) : α → β :=
+def fn_update {α : Type} {β : Type} [decidable_eq α] (f : α → β) (a : α) (b : β) : α → β :=
     λ x, if x = a then b else f x
 
 notation f `[` a `↦` b `]` := fn_update f a b 
 
 def Capp : list (var × ob_lin_type) → fn_body → (var → ob_lin_type) → fn_body
 | [] (fn_body.let z e F) βₗ := fn_body.let z e F
-| ((y, ob_lin_type.𝕆)::xs) (fn_body.let z e F) βₗ := 
-    let ys := xs.map (λ ⟨x, b⟩, x) in 
-    𝕆plus y (list_to_set ys ∪ FV F) (Capp xs (fn_body.let z e F) βₗ) βₗ -- typo in the paper!
-| ((y, ob_lin_type.𝔹)::xs) (fn_body.let z e F) βₗ :=
-    Capp xs (fn_body.let z e (𝕆minus_var y F βₗ)) βₗ
+| ((y, t)::xs) (fn_body.let z e F) βₗ := 
+    if t = 𝕆 then
+        let ys := xs.map (λ ⟨x, b⟩, x) in 
+            𝕆plus y (ys ∪ FV F) (Capp xs (fn_body.let z e F) βₗ) βₗ
+    else
+        Capp xs (fn_body.let z e (𝕆minus_var y F βₗ)) βₗ
 | xs F βₗ := F
 
 def C (β : const → list ob_lin_type) : fn_body → (var → ob_lin_type) → fn_body
-| (fn_body.return x) βₗ := 𝕆plus x {} (fn_body.return x) βₗ
+| (fn_body.return x) βₗ := 𝕆plus x ∅ (fn_body.return x) βₗ
 | (fn_body.case x Fs) βₗ := let ys := FV (fn_body.case x Fs) in 
-    fn_body.case x (Fs.map (λ F, 𝕆minus (set_to_list ys) (C F βₗ) βₗ)) -- how do we tell lean that this terminates?
+    fn_body.case x (Fs.map_wf (λ F h, 𝕆minus ys (C F βₗ) βₗ))
 | (fn_body.let y (expr.proj i x) F) βₗ := 
-    if βₗ x = ob_lin_type.𝕆 then
+    if βₗ x = 𝕆 then
         fn_body.let y (expr.proj i x) (fn_body.inc y (𝕆minus_var x (C F βₗ) βₗ))
     else
-        fn_body.let y (expr.proj i x) (C F (βₗ[y ↦ ob_lin_type.𝔹]))
+        fn_body.let y (expr.proj i x) (C F (βₗ[y ↦ 𝔹]))
 | (fn_body.let y (expr.reset x) F) βₗ := fn_body.let y (expr.reset x) (C F βₗ)
 | (fn_body.let z (expr.const_app_full c ys) F) βₗ := Capp (ys.zip (β c)) (fn_body.let z (expr.const_app_full c ys) (C F βₗ)) βₗ
 | (fn_body.let z (expr.const_app_part c ys) F) βₗ := 
-    Capp (ys.map (λ y, ⟨y, ob_lin_type.𝕆⟩)) (fn_body.let z (expr.const_app_part c ys) (C F βₗ)) βₗ
+    Capp (ys.map (λ y, ⟨y, ⟨𝕆, or.inl rfl⟩⟩)) (fn_body.let z (expr.const_app_part c ys) (C F βₗ)) βₗ
     -- here we ignore the first case to avoid proving non-termination. so far this should be equivalent, it may however cause issues down the road!
 | (fn_body.let z (expr.var_app x y) F) βₗ := 
-    Capp ([⟨x, ob_lin_type.𝕆⟩, ⟨y, ob_lin_type.𝕆⟩]) (fn_body.let z (expr.var_app x y) (C F βₗ)) βₗ   
-| (fn_body.let z (expr.ctor_app ⟨i, ys⟩) F) βₗ :=
-    Capp (ys.map (λ y, ⟨y, ob_lin_type.𝕆⟩)) (fn_body.let z (expr.ctor_app ⟨i, ys⟩) (C F βₗ)) βₗ
-| (fn_body.let z (expr.reuse x ⟨i, ys⟩) F) βₗ :=
-    Capp (ys.map (λ y, ⟨y, ob_lin_type.𝕆⟩)) (fn_body.let z (expr.reuse x ⟨i, ys⟩) (C F βₗ)) βₗ
+    Capp ([⟨x, 𝕆⟩, ⟨y, 𝕆⟩]) (fn_body.let z (expr.var_app x y) (C F βₗ)) βₗ   
+| (fn_body.let z (expr.ctor_app i ys) F) βₗ :=
+    Capp (ys.map (λ y, ⟨y, 𝕆⟩)) (fn_body.let z (expr.ctor_app i ys) (C F βₗ)) βₗ
+| (fn_body.let z (expr.reuse x i ys) F) βₗ :=
+    Capp (ys.map (λ y, ⟨y, 𝕆⟩)) (fn_body.let z (expr.reuse x i ys) (C F βₗ)) βₗ
 | F βₗ := F
 
-inductive expr_wf : set var → expr → Prop
-notation Γ ` ⊩ `:1 e := expr_wf Γ e
-| const_app_full (δ : const → fn) (Γ : set var) (ys : list var) (c : const) :
-    (list_to_set ys ⊂ Γ) → (ys.length = (δ c).yc.length)
-    → (Γ ⊩ expr.const_app_full c ys)
-| const_app_part (Γ : set var) (c : const) (ys : list var) :
-    (list_to_set ys ⊂ Γ)
-    → (Γ ⊩ expr.const_app_part c ys)
-| var_app (Γ : set var) (x y : var) :
-    ({x, y} ⊂ Γ)
-    → (Γ ⊩ expr.var_app x y)
-| ctor_app (Γ : set var) (c : ctor_app) : 
-    (list_to_set c.v ⊂ Γ)
-    → (Γ ⊩ expr.ctor_app c)
-| proj (Γ : set var) (x : var) (i : ctor) : 
-    ({x} ⊂ Γ)
-    → (Γ ⊩ expr.proj i x)
-| reset (Γ : set var) (x : var) :
-    ({x} ⊂ Γ)
-    → (Γ ⊩ expr.reset x)
-| reuse (Γ : set var) (x : var) (c : ctor_app) :
-    ({x} ∪ list_to_set c.v ⊂ Γ)
-    → (Γ ⊩ expr.reuse x c)
+-- here we might need hypotheses like ys ⊆ Γ instead of just using Γ ∪ ys since order matters in lists
+inductive expr_wf (δ : const → fn) : list var → expr → Prop
+notation Γ ` ⊢ `:1 e := expr_wf Γ e
+| const_app_full (Γ : list var) (ys : list var) (c : const) :
+    (ys ⊆ Γ) → (ys.length = (δ c).ys.length)
+    → (Γ ⊢ expr.const_app_full c ys)
+| const_app_part (Γ : list var) (c : const) (ys : list var) :
+    (ys ⊆ Γ)
+    → (Γ ⊢ expr.const_app_part c ys)
+| var_app (Γ : list var) (x y : var) :
+    ([x, y] ⊆ Γ)
+    → (Γ ⊢ expr.var_app x y)
+| ctor_app (Γ : list var) (i : ctor) (ys : list var) : 
+    (ys ⊆ Γ)
+    → (Γ ⊢ expr.ctor_app i ys)
+| proj (Γ : list var) (x : var) (i : ctor) : 
+    (x ∈ Γ)
+    → (Γ ⊢ expr.proj i x)
+| reset (Γ : list var) (x : var) :
+    (x ∈ Γ)
+    → (Γ ⊢ expr.reset x)
+| reuse (Γ : list var) (x : var) (i : ctor) (ys : list var) :
+    (ys ∪ [x] ⊆ Γ)
+    → (Γ ⊢ expr.reuse x i ys)
 
-inductive fn_body_wf : set var → fn_body → Prop
-notation Γ ` ⊩ `:1 f := fn_body_wf Γ f
-| return (Γ : set var) (x : var) : (Γ ⊩ fn_body.return x) -- error in the paper: what is well-formedness of variables?
-| «let» (Γ : set var) (z : var) (e : expr) (F : fn_body) (xs : list var) :
-    (expr_wf Γ e) → (z ∈ FV F) → (z ∉ Γ) → (Γ ∪ {z} ⊩ F)
-    → (Γ ∪ list_to_set xs ⊩ fn_body.let z e F) -- what is xs? how do i use the expr_wf notation?
-| case (Γ : set var) (x : var) (Fs : list fn_body):
-    ({x} ⊂ Γ) → (∀ F ∈ Fs, Γ ⊩ F)
-    → (Γ ⊩ fn_body.case x Fs)
+notation δ `;` Γ ` ⊢ `:1 e := expr_wf δ Γ e
 
-inductive fn_wf : fn → Prop
-| fn (f : fn) : (fn_body_wf (list_to_set f.yc) f.F) → fn_wf f
+inductive fn_body_wf (δ : const → fn) : list var → fn_body → Prop
+notation Γ ` ⊢ `:1 f := fn_body_wf Γ f
+| return (Γ : list var) (x : var) : (Γ ⊢ fn_body.return x) -- error in the paper: what is well-formedness of variables?
+| «let» (Γ : list var) (z : var) (e : expr) (F : fn_body) (xs : list var) :
+    (δ;Γ ⊢ e) → (z ∈ FV F) → (z ∈ Γ) → (Γ ⊢ F)
+    → (Γ.remove_all ([z]) ⊢ fn_body.let z e F) -- NOTE: i removed the xs here. this remove_all-business is a bit strange, but the only thing i can think of right now to deal with the list order.
+| case (Γ : list var) (x : var) (Fs : list fn_body):
+    (x ∈ Γ) → (∀ F ∈ Fs, Γ ⊢ F)
+    → (Γ ⊢ fn_body.case x Fs)
 
-inductive const_wf : (const → fn) → const → Prop
-| const (δ : const → fn) (c : const) : (fn_wf (δ c)) → const_wf δ c
+notation δ `;` Γ ` ⊢ `:1 f := fn_body_wf δ Γ f
 
-inductive reuse_fn_body_wf : set var → fn_body → Prop
-notation Γ ` ⊩ `:1 f := reuse_fn_body_wf Γ f
-| return (Γ : set var) (x : var) : Γ ⊩ fn_body.return x
-| let_reset (Γ : set var) (z x : var) (F : fn_body) :
-    ({z} ⊂ Γ) → (Γ ⊩ F)
-    → (Γ ⊩ fn_body.let z (expr.reset x) F)
-| let_reuse (Γ : set var) (z x : var) (F : fn_body) (c : ctor_app) :
-    (Γ ⊩ F)
-    → (Γ ∪ {x} ⊩ fn_body.let z (expr.reuse x c) F)
-| let_const_app_full (Γ : set var) (F : fn_body) (z : var) (c : const) (ys : list var) :
-    (Γ ⊩ F)
-    → (Γ ⊩ fn_body.let z (expr.const_app_full c ys) F)
-| let_const_app_part (Γ : set var) (F : fn_body) (z : var) (c : const) (ys : list var) :
-    (Γ ⊩ F)
-    → (Γ ⊩ fn_body.let z (expr.const_app_part c ys) F)
-| let_var_app (Γ : set var) (F : fn_body) (z x y : var) :
-    (Γ ⊩ F)
-    → (Γ ⊩ fn_body.let z (expr.var_app x y) F)
-| let_ctor_app (Γ : set var) (F : fn_body) (z : var) (c : ctor_app) :
-    (Γ ⊩ F)
-    → (Γ ⊩ fn_body.let z (expr.ctor_app c) F)
-| let_proj (Γ : set var) (F : fn_body) (z x : var) (i : ctor) :
-    (Γ ⊩ F)
-    → (Γ ⊩ fn_body.let z (expr.proj i x) F)
-| case (Γ : set var) (x : var) (Fs : list fn_body) :
-    (∀ F ∈ Fs, Γ ⊩ F)
-    → (Γ ⊩ fn_body.case x Fs)
+inductive fn_wf (δ : const → fn) : fn → Prop
+notation ` ⊢ `:1 f := fn_wf f
+| fn (f : fn) : (δ;f.ys ⊢ f.F) → (⊢ f)
 
-inductive reuse_const_wf : (const → fn) → const → Prop
-| const (δ : const → fn) (c : const) :
-    (reuse_fn_body_wf {} (δ c).F)
-    → reuse_const_wf δ c
+notation δ ` ⊢ `:1 f := fn_wf δ f
+
+inductive const_wf (δ : const → fn) : const → Prop
+notation ` ⊢ `:1 c := const_wf c
+| const (c : const) : (δ ⊢ δ c) → (⊢ c)
+
+notation δ ` ⊢ `:1 c := const_wf δ c
+
+inductive reuse_fn_body_wf : list var → fn_body → Prop
+notation Γ ` ⊢ᵣ `:1 f := reuse_fn_body_wf Γ f
+| return (Γ : list var) (x : var) : Γ ⊢ᵣ fn_body.return x
+| let_reset (Γ : list var) (z x : var) (F : fn_body) :
+    (z ∈ Γ) → (Γ ⊢ᵣ F)
+    → (Γ.remove_all ([z]) ⊢ᵣ fn_body.let z (expr.reset x) F)
+| let_reuse (Γ : list var) (z x : var) (F : fn_body) (i : ctor) (ys : list var) :
+    (x ∈ Γ) → (Γ.remove_all ([x]) ⊢ᵣ F)
+    → (Γ ⊢ᵣ fn_body.let z (expr.reuse x i ys) F)
+| let_const_app_full (Γ : list var) (F : fn_body) (z : var) (c : const) (ys : list var) :
+    (Γ ⊢ᵣ F)
+    → (Γ ⊢ᵣ fn_body.let z (expr.const_app_full c ys) F)
+| let_const_app_part (Γ : list var) (F : fn_body) (z : var) (c : const) (ys : list var) :
+    (Γ ⊢ᵣ F)
+    → (Γ ⊢ᵣ fn_body.let z (expr.const_app_part c ys) F)
+| let_var_app (Γ : list var) (F : fn_body) (z x y : var) :
+    (Γ ⊢ᵣ F)
+    → (Γ ⊢ᵣ fn_body.let z (expr.var_app x y) F)
+| let_ctor_app (Γ : list var) (F : fn_body) (z : var) (i : ctor) (ys : list var) :
+    (Γ ⊢ᵣ F)
+    → (Γ ⊢ᵣ fn_body.let z (expr.ctor_app i ys) F)
+| let_proj (Γ : list var) (F : fn_body) (z x : var) (i : ctor) :
+    (Γ ⊢ᵣ F)
+    → (Γ ⊢ᵣ fn_body.let z (expr.proj i x) F)
+| case (Γ : list var) (x : var) (Fs : list fn_body) :
+    (∀ F ∈ Fs, Γ ⊢ᵣ F)
+    → (Γ ⊢ᵣ fn_body.case x Fs)
+
+notation Γ ` ⊢ᵣ `:1 f := reuse_fn_body_wf Γ f
+
+inductive reuse_const_wf (δ : const → fn) : const → Prop
+notation ` ⊢ᵣ `:1 c := reuse_const_wf c
+| const (c : const) :
+    ([] ⊢ᵣ (δ c).F)
+    → (⊢ᵣ c)
+
+notation δ ` ⊢ᵣ `:1 c := reuse_const_wf δ c
 
 end rc_correctness
