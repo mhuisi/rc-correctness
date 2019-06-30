@@ -84,11 +84,11 @@ def FV : fn_body → list var
 structure fn := (ys : list var) (F : fn_body)
 
 inductive rc : Type
-| var : var → rc
-| const : const → rc
-| expr : expr → rc
-| fn_body : fn_body → rc
-| fn : fn → rc
+| var (x : var) : rc
+| const (c : const) : rc
+| expr (e : expr) : rc
+| fn_body (F : fn_body) : rc
+| fn (f : fn) : rc
 
 instance var_to_rc : has_coe var rc := ⟨rc.var⟩ 
 
