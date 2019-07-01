@@ -50,8 +50,6 @@ inductive fn_body : Type
 | inc (x : var) (F : fn_body) : fn_body
 | dec (x : var) (F : fn_body) : fn_body
 
-#print fn_body.rec
-
 def {l} fn_body.rec_wf (C : fn_body → Sort l)
   (return : Π (x : var), C (fn_body.return x))
   («let» : Π (x : var) (e : expr) (F : fn_body) (F_ih : C F), C (fn_body.let x e F))
@@ -77,8 +75,8 @@ def FV_expr : expr → list var
 
 def FV : fn_body → list var
 | (fn_body.return x) := [x]
-| (fn_body.let x e F) := FV_expr e ∪ (FV F).erase x
-| (fn_body.case x Fs) := (Fs.map_wf (λ F h, FV F)).foldr (∪) []
+| (fn_body.let x e F) := FV_expr e ∪ ((FV F).filter (≠ x))
+| (fn_body.case x Fs) := (Fs.map_wf (λ F h, FV F)).join.erase_dup.insert x
 | (fn_body.inc x F) := (FV F).insert x
 | (fn_body.dec x F) := (FV F).insert x
 
@@ -249,8 +247,7 @@ def C (β : const → var → ob_lin_type) : fn_body → (var → ob_lin_type) �
 | (fn_body.let y (expr.reset x) F) βₗ := fn_body.let y (expr.reset x) (C F βₗ)
 | (fn_body.let z (expr.const_app_full c ys) F) βₗ := Capp (ys.map (λ y, ⟨y, β c y⟩)) (fn_body.let z (expr.const_app_full c ys) (C F βₗ)) βₗ
 | (fn_body.let z (expr.const_app_part c ys) F) βₗ := 
-  Capp (ys.map (λ y, ⟨y, 𝕆⟩)) (fn_body.let z (expr.const_app_part c ys) (C F βₗ)) βₗ
-  -- here we ignore the first case to avoid proving non-termination. so far this should be equivalent, it may however cause issues down the road!
+  Capp (ys.map (λ y, ⟨y, β c y⟩)) (fn_body.let z (expr.const_app_part c ys) (C F βₗ)) βₗ
 | (fn_body.let z (expr.var_app x y) F) βₗ := 
   Capp ([⟨x, 𝕆⟩, ⟨y, 𝕆⟩]) (fn_body.let z (expr.var_app x y) (C F βₗ)) βₗ   
 | (fn_body.let z (expr.ctor_app i ys) F) βₗ :=
@@ -292,12 +289,11 @@ notation Γ ` ⊢ `:1 f := fn_body_wf Γ f
   → (Γ ⊢ fn_body.return x)
 | «let» (Γ : multiset var) (z : var) (e : expr) (F : fn_body) :
   (δ; Γ ⊢ e) → (z ∈ FV F) → (z ∉ Γ) → (z :: Γ ⊢ F)
-  → (Γ ⊢ fn_body.let z e F) -- NOTE: i removed the xs here.
+  → (Γ ⊢ fn_body.let z e F)
 | case (Γ : multiset var) (x : var) (Fs : list fn_body):
   (x ∈ Γ) → (∀ F ∈ Fs, Γ ⊢ F)
   → (Γ ⊢ fn_body.case x Fs)
 
-#print fn_body.rec
 
 notation δ `; ` Γ ` ⊢ `:1 f := fn_body_wf δ Γ f
 
@@ -346,7 +342,7 @@ notation Γ ` ⊢ᵣ `:1 f := reuse_fn_body_wf Γ f
 inductive reuse_const_wf (δ : const → fn) : const → Prop
 notation ` ⊢ᵣ `:1 c := reuse_const_wf c
 | const (c : const) :
-  (∅ ⊢ᵣ (δ c).F)
+  (δ; ∅ ⊢ (δ c).F) → (∅ ⊢ᵣ (δ c).F)
   → (⊢ᵣ c)
 
 notation δ ` ⊢ᵣ `:1 c := reuse_const_wf δ c
@@ -378,6 +374,71 @@ begin
     { rw h₁, assumption },
     { replace h_a := subset_iff.mp h_a,
       exact h_a h₁ } }
+end
+
+theorem FV_F {Γ : multiset var} {F : fn_body} (h : δ; Γ ⊢ F) : 
+  ↑(FV F) ⊆ Γ :=
+begin
+  with_cases { induction F using rc_correctness.fn_body.rec_wf generalizing Γ },
+  case return : x {
+    apply subset_iff.mpr,
+    intros y h₁, 
+    simp [FV] at h₁,
+    rw h₁,
+    cases h,
+    assumption
+  },
+  case «let» : x e F ih {
+    apply subset_iff.mpr,
+    intros y h₁, 
+    simp [FV] at h₁,
+    cases h,
+    cases h₁,
+    case or.inl { 
+      have h₂ : ↑(FV_expr e) ⊆ Γ, from FV_e h_a,
+      replace h₂ := subset_iff.mp h₂,
+      exact h₂ h₁ 
+    },
+    case or.inr { 
+      have h₂ : ↑(FV F) ⊆ x :: Γ, from ih h_a_3,
+      replace h₂ := subset_iff.mp h₂,
+      cases h₁,
+      have h₃ : y ∈ x :: Γ, from h₂ h₁_left,
+      replace h₃ := mem_cons.mp h₃,
+      cases h₃,
+      { contradiction },
+      { assumption }
+    }
+  },
+  case case : x Fs ih {
+    apply subset_iff.mpr,
+    intros y h₁, 
+    simp [FV] at h₁,
+    cases h,
+    replace h₁ := mem_insert_iff.mp h₁,
+    cases h₁,
+    case or.inl {
+      rw h₁,
+      assumption
+    },
+    case or.inr {
+      rw map_wf_eq_map at h₁,
+      simp at ih,
+      simp at h₁,
+      rcases h₁ with ⟨l, ⟨⟨a, ⟨a_in_Fs, FV_a_eq_l⟩⟩, y_in_l⟩⟩,
+      rw ←FV_a_eq_l at y_in_l,
+      have a_typed : (δ; Γ ⊢ a), from h_a_1 a a_in_Fs,
+      have FV_a_sub_Γ : ↑(FV a) ⊆ Γ, from ih a a_in_Fs a_typed,
+      replace FV_a_sub_Γ := subset_iff.mp FV_a_sub_Γ,
+      exact FV_a_sub_Γ y_in_l
+    },
+  },
+  case inc : x F ih {
+    cases h
+  },
+  case dec : x F ih {
+    cases h
+  }
 end
 
 end rc_correctness
