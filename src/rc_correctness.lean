@@ -1,4 +1,6 @@
 import data.multiset
+import tactic.interactive
+import logic.function
 
 namespace list
 open well_founded_tactics
@@ -29,56 +31,98 @@ end list
 namespace rc_correctness
 
 def var := ℕ
+local attribute [reducible] var
+instance var_has_repr : has_repr var := ⟨repr⟩
+local attribute [semireducible] var
 
 def const := ℕ
+local attribute [reducible] const
+instance const_has_repr : has_repr const := ⟨repr⟩
+local attribute [semireducible] const
 
-def ctor := ℕ
+def cnstr := ℕ
 
 inductive expr : Type
 | const_app_full (c : const) (ys : list var) : expr
 | const_app_part (c : const) (ys : list var) : expr
 | var_app (x : var) (y : var) : expr
-| ctor_app (i : ctor) (ys : list var) : expr
-| proj (i : ctor) (x : var) : expr
+| ctor (i : cnstr) (ys : list var) : expr
+| proj (i : cnstr) (x : var) : expr
 | reset (x : var) : expr
-| reuse (x : var) (i : ctor) (ys : list var) : expr
+| reuse (x : var) (i : cnstr) (ys : list var) : expr
+
+open rc_correctness.expr
+
+notation c `⟦` ys `…` `⟧` := const_app_full c ys
+notation c `⟦` ys `…` `, ` `_` `⟧` := const_app_part c ys
+notation x `⟦` y `⟧` := var_app x y
+notation `⟪` ys `⟫` i := ctor i ys
+notation x `[` i `]` := proj i x
+notation `reuse ` x ` in ` `⟪` ys `⟫` i := reuse x i ys
+
+def expr_repr : expr → string
+| (c⟦ys…⟧) := c.repr ++ "⟦" ++ ys.repr ++ "…⟧"
+| (c⟦ys…, _⟧) := c.repr ++ "⟦" ++ ys.repr ++ "…, _⟧"
+| (x⟦y⟧) := x.repr ++ "⟦" ++ y.repr ++ "⟧"
+| (⟪ys⟫i) := "⟪" ++ ys.repr ++ "⟫" ++ i.repr 
+| (x[i]) := x.repr ++ "[" ++ i.repr ++ "]"
+| (reset x) := "reset " ++ x.repr
+| (reuse x in ⟪ys⟫i) := "reuse " ++ x.repr ++ " in " ++ "⟪" ++ ys.repr ++ "⟫" ++ i.repr
+
+instance expr_has_repr : has_repr expr := ⟨expr_repr⟩ 
 
 inductive fn_body : Type
-| return (x : var) : fn_body 
+| ret (x : var) : fn_body 
 | «let» (x : var) (e : expr) (F : fn_body) : fn_body
 | case (x : var) (Fs : list fn_body) : fn_body
 | inc (x : var) (F : fn_body) : fn_body
 | dec (x : var) (F : fn_body) : fn_body
 
+open fn_body
+
+notation x ` ≔ ` e `; ` F := fn_body.let x e F
+notation `case ` x ` of ` Fs := fn_body.case x Fs
+notation `inc ` x `; ` F := fn_body.inc x F
+notation `dec ` x `; ` F := fn_body.dec x F
+
+def fn_body_repr : fn_body → string
+| (ret x) := "ret " ++ x.repr
+| (x ≔ e; F) := x.repr ++ " ≔ " ++ repr e ++ "; " ++ fn_body_repr F
+| (case x of Fs) := "case " ++ x.repr ++ " of " ++ (Fs.map_wf (λ F h, fn_body_repr F)).repr
+| (inc x; F) := "inc " ++ x.repr ++ "; " ++ fn_body_repr F
+| (dec x; F) := "dec " ++ x.repr ++ "; " ++ fn_body_repr F
+
+instance fn_body_has_repr : has_repr fn_body := ⟨fn_body_repr⟩ 
+
 def {l} fn_body.rec_wf (C : fn_body → Sort l)
-  (return : Π (x : var), C (fn_body.return x))
-  («let» : Π (x : var) (e : expr) (F : fn_body) (F_ih : C F), C (fn_body.let x e F))
-  (case : Π (x : var) (Fs : list fn_body) (Fs_ih : ∀ F ∈ Fs, C F), C (fn_body.case x Fs))
-  (inc : Π (x : var) (F : fn_body) (F_ih : C F), C (fn_body.inc x F))
-  (dec : Π (x : var) (F : fn_body) (F_ih : C F), C (fn_body.dec x F)) : Π (x : fn_body), C x
-| (fn_body.return a) := return a
-| (fn_body.let x a a_1) := «let» x a a_1 (fn_body.rec_wf a_1)
-| (fn_body.case a a_1) := case a a_1 (λ a h,
+  («ret» : Π (x : var), C (ret x))
+  («let» : Π (x : var) (e : expr) (F : fn_body) (F_ih : C F), C (x ≔ e; F))
+  («case» : Π (x : var) (Fs : list fn_body) (Fs_ih : ∀ F ∈ Fs, C F), C (case x of Fs))
+  («inc» : Π (x : var) (F : fn_body) (F_ih : C F), C (inc x; F))
+  («dec» : Π (x : var) (F : fn_body) (F_ih : C F), C (dec x; F)) : Π (x : fn_body), C x
+| (fn_body.ret a) := «ret» a
+| (x ≔ a; a_1) := «let» x a a_1 (fn_body.rec_wf a_1)
+| (case a of a_1) := «case» a a_1 (λ a h,
   have sizeof a < 1 + sizeof a_1, from nat.lt_add_left _ _ _ (list.sizeof_lt_sizeof_of_mem h),
   fn_body.rec_wf a)
-| (fn_body.inc a a_1) := inc a a_1 (fn_body.rec_wf a_1)
-| (fn_body.dec a a_1) := dec a a_1 (fn_body.rec_wf a_1)
+| (inc a; a_1) := «inc» a a_1 (fn_body.rec_wf a_1)
+| (dec a; a_1) := «dec» a a_1 (fn_body.rec_wf a_1)
 
-def FV_expr : expr → list var
-| (expr.const_app_full _ xs) := xs
-| (expr.const_app_part c xs) := xs
-| (expr.var_app x y) := [x, y]
-| (expr.ctor_app i xs) := xs
-| (expr.proj c x) := [x]
-| (expr.reset x) := [x]
-| (expr.reuse x i xs) := xs.insert x
+@[simp] def FV_expr : expr → list var
+| (c⟦xs…⟧) := xs
+| (c⟦xs…, _⟧) := xs
+| (x⟦y⟧) := [x, y]
+| (⟪xs⟫i) := xs
+| (x[i]) := [x]
+| (reset x) := [x]
+| (reuse x in ⟪xs⟫i) := xs.insert x
 
-def FV : fn_body → list var
-| (fn_body.return x) := [x]
-| (fn_body.let x e F) := FV_expr e ∪ ((FV F).filter (≠ x))
-| (fn_body.case x Fs) := (Fs.map_wf (λ F h, FV F)).join.erase_dup.insert x
-| (fn_body.inc x F) := (FV F).insert x
-| (fn_body.dec x F) := (FV F).insert x
+@[simp] def FV : fn_body → list var
+| (ret x) := [x]
+| (x ≔ e; F) := FV_expr e ∪ ((FV F).filter (≠ x))
+| (case x of Fs) := (Fs.map_wf (λ F h, FV F)).join.erase_dup.insert x
+| (inc x; F) := (FV F).insert x
+| (dec x; F) := (FV F).insert x
 
 structure fn := (ys : list var) (F : fn_body)
 
@@ -90,25 +134,10 @@ inductive rc : Type
 | fn (f : fn) : rc
 
 instance var_to_rc : has_coe var rc := ⟨rc.var⟩ 
-
 instance const_to_rc : has_coe var rc := ⟨rc.const⟩ 
-
 instance expr_to_rc : has_coe expr rc := ⟨rc.expr⟩ 
-
 instance fn_body_to_rc : has_coe fn_body rc := ⟨rc.fn_body⟩
-
 instance fn_to_rc : has_coe fn rc := ⟨rc.fn⟩ 
-
-def erase_rc_fn_body : fn_body → fn_body
-| (fn_body.let _ (expr.reset _) F) := erase_rc_fn_body F
-| (fn_body.let z (expr.reuse x i ys) F) := fn_body.let z (expr.ctor_app i ys) (erase_rc_fn_body F)
-| (fn_body.let x e F) := fn_body.let x e (erase_rc_fn_body F)
-| (fn_body.inc _ F) := erase_rc_fn_body F
-| (fn_body.dec _ F) := erase_rc_fn_body F
-| (fn_body.case x cases) := fn_body.case x (cases.map_wf (λ c h, erase_rc_fn_body c))
-| (fn_body.return x) := fn_body.return x 
-
-def erase_rc_fn (f : fn) : fn := ⟨f.ys, erase_rc_fn_body f.F⟩ 
 
 @[derive decidable_eq]
 inductive ob_lin_type : Type 
@@ -135,6 +164,170 @@ abbreviation type_context := multiset typed_var
 open ob_lin_type
 open lin_type
 
+inductive expr_wf (δ : const → fn) : multiset var → expr → Prop
+notation Γ ` ⊢ `:1 e := expr_wf Γ e
+| const_app_full (Γ : multiset var) (ys : list var) (c : const) :
+  (↑ys ⊆ Γ) → (ys.length = (δ c).ys.length)
+  → (Γ ⊢ c⟦ys…⟧)
+| const_app_part (Γ : multiset var) (c : const) (ys : list var) :
+  (↑ys ⊆ Γ)
+  → (Γ ⊢ c⟦ys…, _⟧)
+| var_app (Γ : multiset var) (x y : var) :
+  (x ∈ Γ) → (y ∈ Γ)
+  → (Γ ⊢ x⟦y⟧)
+| ctor (Γ : multiset var) (i : cnstr) (ys : list var) : 
+  (↑ys ⊆ Γ)
+  → (Γ ⊢ ⟪ys⟫i)
+| proj (Γ : multiset var) (x : var) (i : cnstr) : 
+  (x ∈ Γ)
+  → (Γ ⊢ x[i])
+| reset (Γ : multiset var) (x : var) :
+  (x ∈ Γ)
+  → (Γ ⊢ reset x)
+| «reuse» (Γ : multiset var) (x : var) (i : cnstr) (ys : list var) :
+  (↑ys ⊆ Γ) → (x ∈ Γ)
+  → (Γ ⊢ reuse x in ⟪ys⟫i)
+
+notation δ `; ` Γ ` ⊢ `:1 e := expr_wf δ Γ e
+
+inductive fn_body_wf (δ : const → fn) : multiset var → fn_body → Prop
+notation Γ ` ⊢ `:1 F := fn_body_wf Γ F
+| ret (Γ : multiset var) (x : var) : 
+  (x ∈ Γ)
+  → (Γ ⊢ ret x)
+| «let» (Γ : multiset var) (z : var) (e : expr) (F : fn_body) :
+  (δ; Γ ⊢ e) → (z ∈ FV F) → (z ∉ Γ) → (z :: Γ ⊢ F)
+  → (Γ ⊢ (z ≔ e; F))
+| «case» (Γ : multiset var) (x : var) (Fs : list fn_body) :
+  (x ∈ Γ) → (∀ F ∈ Fs, Γ ⊢ F)
+  → (Γ ⊢ (case x of Fs))
+| «inc» (Γ : multiset var) (x : var) (F : fn_body) :
+  (x ∈ Γ) → (Γ ⊢ F)
+  → (Γ ⊢ inc x; F)
+| «dec» (Γ : multiset var) (x : var) (F : fn_body) :
+  (x ∈ Γ) → (Γ ⊢ F)
+  → (Γ ⊢ dec x; F)
+
+notation δ `; ` Γ ` ⊢ `:1 F := fn_body_wf δ Γ F
+
+inductive const_wf (δ : const → fn) : const → Prop
+notation `⊢ `:1 c := const_wf c
+| const (c : const) : (δ; (δ c).ys ⊢ (δ c).F) → (⊢ c)
+
+notation δ ` ⊢ `:1 c := const_wf δ c
+
+inductive program_wf : (const → fn) → Prop
+notation `⊢ `:1 δ := program_wf δ
+| program (δ : const → fn) :
+  (∀ c : const, δ ⊢ c)
+  → (⊢ δ)
+
+notation `⊢ `:1 δ := program_wf δ
+
+inductive reuse_fn_body_wf : multiset var → fn_body → Prop
+notation Γ ` ⊢ᵣ `:1 F := reuse_fn_body_wf Γ F
+| ret (Γ : multiset var) (x : var) : Γ ⊢ᵣ ret x
+| let_reset (Γ : multiset var) (z x : var) (F : fn_body) :
+  (z :: Γ ⊢ᵣ F)
+  → (Γ ⊢ᵣ (z ≔ reset x; F))
+| let_reuse (Γ : multiset var) (z x : var) (F : fn_body) (i : cnstr) (ys : list var) :
+  (Γ ⊢ᵣ F)
+  → (x :: Γ ⊢ᵣ (z ≔ reuse x in ⟪ys⟫i; F))
+| let_const_app_full (Γ : multiset var) (F : fn_body) (z : var) (c : const) (ys : list var) :
+  (Γ ⊢ᵣ F)
+  → (Γ ⊢ᵣ (z ≔ c⟦ys…⟧; F))
+| let_const_app_part (Γ : multiset var) (F : fn_body) (z : var) (c : const) (ys : list var) :
+  (Γ ⊢ᵣ F)
+  → (Γ ⊢ᵣ (z ≔ c⟦ys…, _⟧; F))
+| let_var_app (Γ : multiset var) (F : fn_body) (z x y : var) :
+  (Γ ⊢ᵣ F)
+  → (Γ ⊢ᵣ (z ≔ x⟦y⟧; F))
+| let_ctor_app (Γ : multiset var) (F : fn_body) (z : var) (i : cnstr) (ys : list var) :
+  (Γ ⊢ᵣ F)
+  → (Γ ⊢ᵣ (z ≔ ⟪ys⟫i; F))
+| let_proj (Γ : multiset var) (F : fn_body) (z x : var) (i : cnstr) :
+  (Γ ⊢ᵣ F)
+  → (Γ ⊢ᵣ (z ≔ x[i]; F))
+| «case» (Γ : multiset var) (x : var) (Fs : list fn_body) :
+  (∀ F ∈ Fs, Γ ⊢ᵣ F)
+  → (Γ ⊢ᵣ case x of Fs)
+| «inc» (Γ : multiset var) (x : var) (F : fn_body) :
+  (Γ ⊢ᵣ F)
+  → (Γ ⊢ᵣ inc x; F)
+| «dec» (Γ : multiset var) (x : var) (F : fn_body) :
+  (Γ ⊢ᵣ F)
+  → (Γ ⊢ᵣ dec x; F)
+
+notation Γ ` ⊢ᵣ `:1 F := reuse_fn_body_wf Γ F
+
+inductive reuse_const_wf (δ : const → fn) : const → Prop
+notation `⊢ᵣ `:1 c := reuse_const_wf c
+| const (c : const) :
+  (δ; ∅ ⊢ (δ c).F)
+  → (⊢ᵣ c)
+
+notation δ ` ⊢ᵣ `:1 c := reuse_const_wf δ c
+
+inductive reuse_program_wf : (const → fn) → Prop
+notation `⊢ᵣ `:1 δ := reuse_program_wf δ
+| program (δ : const → fn) : 
+  (⊢ δ) → (∀ c : const, δ ⊢ᵣ c)
+  → (⊢ᵣ δ)
+
+notation `⊢ᵣ `:1 δ := reuse_program_wf δ
+
+inductive borrow_fn_body_wf (β : const → var → ob_lin_type) : fn_body → Prop
+notation ` ⊢ᴮ `:1 F := borrow_fn_body_wf F
+| ret (x : var) : ⊢ᴮ ret x
+| let_reset (z x : var) (F : fn_body) :
+  (⊢ᴮ F)
+  → (⊢ᴮ (z ≔ reset x; F))
+| let_reuse (z x : var) (F : fn_body) (i : cnstr) (ys : list var) :
+  (⊢ᴮ F)
+  → (⊢ᴮ (z ≔ reuse x in ⟪ys⟫i; F))
+| let_const_app_full (F : fn_body) (z : var) (c : const) (ys : list var) :
+  (⊢ᴮ F)
+  → (⊢ᴮ (z ≔ c⟦ys…⟧; F))
+| let_const_app_part (F : fn_body) (z : var) (c : const) (ys : list var) :
+  (∀ x : var, β c x ≠ 𝔹) → (⊢ᴮ F)
+  → (⊢ᴮ (z ≔ c⟦ys…, _⟧; F))
+| let_var_app (F : fn_body) (z x y : var) :
+  (⊢ᴮ F)
+  → (⊢ᴮ (z ≔ x⟦y⟧; F))
+| let_ctor_app (F : fn_body) (z : var) (i : cnstr) (ys : list var) :
+  (⊢ᴮ F)
+  → (⊢ᴮ (z ≔ ⟪ys⟫i; F))
+| let_proj (F : fn_body) (z x : var) (i : cnstr) :
+  (⊢ᴮ F)
+  → (⊢ᴮ (z ≔ x[i]; F))
+| «case» (x : var) (Fs : list fn_body) :
+  (∀ F ∈ Fs, ⊢ᴮ F)
+  → (⊢ᴮ case x of Fs)
+| «inc» (x : var) (F : fn_body) :
+  (⊢ᴮ F)
+  → (⊢ᴮ inc x; F)
+| «dec» (x : var) (F : fn_body) :
+  (⊢ᴮ F)
+  → (⊢ᴮ dec x; F)
+
+notation β ` ⊢ᴮ `:1 F := borrow_fn_body_wf β F
+
+inductive borrow_const_wf (β : const → var → ob_lin_type) (δ : const → fn) : const → Prop
+notation `⊢ᴮ ` c := borrow_const_wf c
+| const (c : const) :
+  (β ⊢ᴮ (δ c).F) -- arity not important here?
+  → (⊢ᴮ c)
+
+notation β `; ` δ ` ⊢ᴮ ` c := borrow_const_wf β δ c
+
+inductive borrow_program_wf (β : const → var → ob_lin_type) : (const → fn) → Prop
+notation `⊢ᴮ ` δ := borrow_program_wf δ
+| program (δ : const → fn) : 
+  (⊢ᵣ δ) → (∀ c : const, β; δ ⊢ᴮ c)
+  → (⊢ᴮ δ)
+
+notation β ` ⊢ᴮ ` δ := borrow_program_wf β δ
+
 inductive linear (β : const → var → ob_lin_type) : type_context → typed_rc → Prop
 notation Γ ` ⊩ `:1 t := linear Γ t
 | var (x : var) (τ : lin_type) : 
@@ -147,50 +340,50 @@ notation Γ ` ⊩ `:1 t := linear Γ t
   → (Γ ⊩ t)
 | inc_o (Γ : type_context) (x : var) (F : fn_body) :
   ((x ∶ 𝕆) ∈ Γ) → ((x ∶ 𝕆) :: Γ ⊩ F ∷ 𝕆)
-  → (Γ ⊩ fn_body.inc x F ∷ 𝕆)
+  → (Γ ⊩ (inc x; F) ∷ 𝕆)
 | inc_b (Γ : type_context) (x : var) (F : fn_body) :
   ((x ∶ 𝔹) ∈ Γ) → ((x ∶ 𝕆) :: Γ ⊩ F ∷ 𝕆)
-  → (Γ ⊩ fn_body.inc x F ∷ 𝕆)
+  → (Γ ⊩ (inc x; F) ∷ 𝕆)
 | dec_o (Γ : type_context) (x : var) (F : fn_body) :
   (Γ ⊩ F ∷ 𝕆)
-  → ((x ∶ 𝕆) :: Γ ⊩ fn_body.dec x F ∷ 𝕆)
+  → ((x ∶ 𝕆) :: Γ ⊩ (dec x; F) ∷ 𝕆)
 | dec_r (Γ : type_context) (x : var) (F : fn_body) :
   (Γ ⊩ F ∷ 𝕆)
-  → ((x ∶ ℝ) :: Γ ⊩ fn_body.dec x F ∷ 𝕆)
-| return (Γ : type_context) (x : var) :
+  → ((x ∶ ℝ) :: Γ ⊩ (dec x; F) ∷ 𝕆)
+| ret (Γ : type_context) (x : var) :
   (Γ ⊩ x ∷ 𝕆)
-  → (Γ ⊩ fn_body.return x ∷ 𝕆)
+  → (Γ ⊩ (ret x) ∷ 𝕆)
 | case_o (Γ : type_context) (x : var) (Fs : list fn_body) :
   ((x ∶ 𝕆) ∈ Γ) → (∀ F ∈ Fs, Γ ⊩ ↑F ∷ 𝕆)
-  → (Γ ⊩ fn_body.case x Fs ∷ 𝕆)
+  → (Γ ⊩ (case x of Fs) ∷ 𝕆)
 | case_b (Γ : type_context) (x : var) (Fs : list fn_body) :
   ((x ∶ 𝔹) ∈ Γ) → (∀ F ∈ Fs, Γ ⊩ ↑F ∷ 𝕆)
-  → (Γ ⊩ fn_body.case x Fs ∷ 𝕆)
+  → (Γ ⊩ (case x of Fs) ∷ 𝕆)
 | const_app_full (Γys : list (type_context × var)) (c : const) :
   (∀ Γy ∈ Γys, (Γy : type_context × var).1 ⊩ Γy.2 ∷ β c Γy.2)
-  → (multiset.join (Γys.map prod.fst) ⊩ expr.const_app_full c (Γys.map prod.snd) ∷ 𝕆)
+  → (multiset.join (Γys.map prod.fst) ⊩ c⟦Γys.map prod.snd…⟧ ∷ 𝕆)
 | const_app_part (ys : list var) (c : const) :
-  ys [∶] 𝕆 ⊩ expr.const_app_part c ys ∷ 𝕆
+  ys [∶] 𝕆 ⊩ c⟦ys…, _⟧ ∷ 𝕆
 | var_app (x y : var) :
-  (x ∶ 𝕆) :: (y ∶ 𝕆) :: 0 ⊩ expr.var_app x y ∷ 𝕆
-| cnstr_app (ys : list var) (i : ctor) :
-  ys [∶] 𝕆 ⊩ expr.ctor_app i ys ∷ 𝕆
+  (x ∶ 𝕆) :: (y ∶ 𝕆) :: 0 ⊩ x⟦y⟧ ∷ 𝕆
+| cnstr_app (ys : list var) (i : cnstr) :
+  ys [∶] 𝕆 ⊩ (⟪ys⟫i) ∷ 𝕆
 | reset (x : var) :
-  (x ∶ 𝕆) :: 0 ⊩ expr.reset x ∷ ℝ
-| reuse (x : var) (ys : list var) (i : ctor) :
-  (x ∶ ℝ) :: (ys [∶] 𝕆) ⊩ expr.reuse x i ys ∷ 𝕆
+  (x ∶ 𝕆) :: 0 ⊩ (reset x) ∷ ℝ
+| «reuse» (x : var) (ys : list var) (i : cnstr) :
+  (x ∶ ℝ) :: (ys [∶] 𝕆) ⊩ (reuse x in ⟪ys⟫i) ∷ 𝕆
 | let_o (Γ : type_context) (xs : list var) (e : expr) (Δ : type_context) (z : var) (F : fn_body) :
   ((xs [∶] 𝕆) ⊆ Δ) → (Γ + (xs [∶] 𝔹) ⊩ e ∷ 𝕆) → ((z ∶ 𝕆) :: Δ ⊩ F ∷ 𝕆)
-  → (Γ + Δ ⊩ fn_body.let z e F ∷ 𝕆)
+  → (Γ + Δ ⊩ (z ≔ e; F) ∷ 𝕆)
 | let_r (Γ : type_context) (xs : list var) (e : expr) (Δ : type_context) (z : var) (F : fn_body) :
   ((xs [∶] 𝕆) ⊆ Δ) → (Γ + (xs [∶] 𝔹) ⊩ e ∷ 𝕆) → ((z ∶ ℝ) :: Δ ⊩ F ∷ 𝕆)
-  → (Γ + Δ ⊩ fn_body.let z e F ∷ 𝕆)
-| proj_bor (Γ : type_context) (x y : var) (F : fn_body) (i : ctor) :
+  → (Γ + Δ ⊩ (z ≔ e; F) ∷ 𝕆)
+| proj_bor (Γ : type_context) (x y : var) (F : fn_body) (i : cnstr) :
   ((x ∶ 𝔹) ∈ Γ) → ((y ∶ 𝔹) :: Γ ⊩ F ∷ 𝕆)
-  → (Γ ⊩ fn_body.let y (expr.proj i x) F ∷ 𝕆)
-| proj_own (Γ : type_context) (x y : var) (F : fn_body) (i : ctor) :
+  → (Γ ⊩ (y ≔ x[i]; F) ∷ 𝕆)
+| proj_own (Γ : type_context) (x y : var) (F : fn_body) (i : cnstr) :
   ((x ∶ 𝕆) ∈ Γ) → ((y ∶ 𝕆) :: Γ ⊩ F ∷ 𝕆)
-  → (Γ ⊩ fn_body.let y (expr.proj i x) (fn_body.inc y F) ∷ 𝕆)
+  → (Γ ⊩ (y ≔ x[i]; inc y; F) ∷ 𝕆)
 
 notation β `; ` Γ ` ⊩ `:1 t := linear β Γ t
 
@@ -202,152 +395,62 @@ notation ` ⊩ `:1 c := linear_const c
 
 notation β `; ` δ ` ⊩ `:1 c := linear_const β δ c
 
-inductive linear_program (β : const → var → ob_lin_type) (δ : const → fn) : (const → fn) → Prop
+inductive linear_program (β : const → var → ob_lin_type) : (const → fn) → Prop
 notation ` ⊩ `:1 δ := linear_program δ
-| program (δᵣ : const → fn) :
-  (∀ c : const, δᵣ c = erase_rc_fn (δ c) ∧ (β; δᵣ ⊩ c))
-  → (⊩ δᵣ)
+| program (δ : const → fn) :
+  (β ⊢ᴮ δ) → (∀ c : const, (β; δ ⊩ c))
+  → (⊩ δ)
 
 notation β `; ` δ ` ⊩ `:1 δᵣ := linear_program β δ δᵣ
 
-def 𝕆plus (x : var) (V : list var) (F : fn_body) (βₗ : var → ob_lin_type) : fn_body :=
-if βₗ x = 𝕆 ∧ x ∉ V then F else fn_body.inc x F
+@[simp] def 𝕆plus (x : var) (V : list var) (F : fn_body) (βₗ : var → ob_lin_type) : fn_body :=
+if βₗ x = 𝕆 ∧ x ∉ V then F else inc x; F
 
-def 𝕆minus_var (x : var) (F : fn_body) (βₗ : var → ob_lin_type) : fn_body :=
-if βₗ x = 𝕆 ∧ x ∉ FV F then fn_body.dec x F else F
+@[simp] def 𝕆minus_var (x : var) (F : fn_body) (βₗ : var → ob_lin_type) : fn_body :=
+if βₗ x = 𝕆 ∧ x ∉ FV F then dec x; F else F
 
-def 𝕆minus : list var → fn_body → (var → ob_lin_type) → fn_body 
+@[simp] def 𝕆minus : list var → fn_body → (var → ob_lin_type) → fn_body 
 | [] F βₗ := F
 | (x :: xs) F βₗ := 𝕆minus xs (𝕆minus_var x F βₗ) βₗ
 
-def fn_update {α : Type} {β : Type} [decidable_eq α] (f : α → β) (a : α) (b : β) : α → β :=
-  λ x, if x = a then b else f x
+notation f `[` a `↦` b `]` := function.update f a b 
 
-notation f `[` a `↦` b `]` := fn_update f a b 
-
-def Capp : list (var × ob_lin_type) → fn_body → (var → ob_lin_type) → fn_body
-| [] (fn_body.let z e F) βₗ := fn_body.let z e F
-| ((y, t)::xs) (fn_body.let z e F) βₗ := 
+@[simp] def Capp : list (var × ob_lin_type) → fn_body → (var → ob_lin_type) → fn_body
+| [] (z ≔ e; F) βₗ := z ≔ e; F
+| ((y, t)::xs) (z ≔ e; F) βₗ := 
   if t = 𝕆 then
     let ys := xs.map (λ ⟨x, b⟩, x) in 
-      𝕆plus y (ys ∪ FV F) (Capp xs (fn_body.let z e F) βₗ) βₗ
+      𝕆plus y (ys ∪ FV F) (Capp xs (z ≔ e; F) βₗ) βₗ
   else
-    Capp xs (fn_body.let z e (𝕆minus_var y F βₗ)) βₗ
+    Capp xs (z ≔ e; 𝕆minus_var y F βₗ) βₗ
 | xs F βₗ := F
 
-def C (β : const → var → ob_lin_type) : fn_body → (var → ob_lin_type) → fn_body
-| (fn_body.return x) βₗ := 𝕆plus x ∅ (fn_body.return x) βₗ
-| (fn_body.case x Fs) βₗ := let ys := FV (fn_body.case x Fs) in 
-  fn_body.case x (Fs.map_wf (λ F h, 𝕆minus ys (C F βₗ) βₗ))
-| (fn_body.let y (expr.proj i x) F) βₗ := 
+@[simp] def C (β : const → var → ob_lin_type) : fn_body → (var → ob_lin_type) → fn_body
+| (ret x) βₗ := 𝕆plus x ∅ (ret x) βₗ
+| (case x of Fs) βₗ :=
+  case x of Fs.map_wf (λ F h, 𝕆minus (FV (case x of Fs)) (C F βₗ) βₗ)
+| (y ≔ x[i]; F) βₗ := 
   if βₗ x = 𝕆 then
-    fn_body.let y (expr.proj i x) (fn_body.inc y (𝕆minus_var x (C F βₗ) βₗ))
+    y ≔ x[i]; inc y; 𝕆minus_var x (C F βₗ) βₗ
   else
-    fn_body.let y (expr.proj i x) (C F (βₗ[y ↦ 𝔹]))
-| (fn_body.let y (expr.reset x) F) βₗ := fn_body.let y (expr.reset x) (C F βₗ)
-| (fn_body.let z (expr.const_app_full c ys) F) βₗ := Capp (ys.map (λ y, ⟨y, β c y⟩)) (fn_body.let z (expr.const_app_full c ys) (C F βₗ)) βₗ
-| (fn_body.let z (expr.const_app_part c ys) F) βₗ := 
-  Capp (ys.map (λ y, ⟨y, β c y⟩)) (fn_body.let z (expr.const_app_part c ys) (C F βₗ)) βₗ
-| (fn_body.let z (expr.var_app x y) F) βₗ := 
-  Capp ([⟨x, 𝕆⟩, ⟨y, 𝕆⟩]) (fn_body.let z (expr.var_app x y) (C F βₗ)) βₗ   
-| (fn_body.let z (expr.ctor_app i ys) F) βₗ :=
-  Capp (ys.map (λ y, ⟨y, 𝕆⟩)) (fn_body.let z (expr.ctor_app i ys) (C F βₗ)) βₗ
-| (fn_body.let z (expr.reuse x i ys) F) βₗ :=
-  Capp (ys.map (λ y, ⟨y, 𝕆⟩)) (fn_body.let z (expr.reuse x i ys) (C F βₗ)) βₗ
+    y ≔ x[i]; C F (βₗ[y ↦ 𝔹])
+| (y ≔ reset x; F) βₗ := y ≔ 
+  reset x; C F βₗ
+| (z ≔ c⟦ys…⟧; F) βₗ := 
+  Capp (ys.map (λ y, ⟨y, β c y⟩)) (z ≔ c⟦ys…⟧; C F βₗ) βₗ
+| (z ≔ c⟦ys…, _⟧; F) βₗ := 
+  Capp (ys.map (λ y, ⟨y, β c y⟩)) (z ≔ c⟦ys…, _⟧; C F βₗ) βₗ
+| (z ≔ x⟦y⟧; F) βₗ := 
+  Capp ([⟨x, 𝕆⟩, ⟨y, 𝕆⟩]) (z ≔ x⟦y⟧; C F βₗ) βₗ   
+| (z ≔ ⟪ys⟫i; F) βₗ :=
+  Capp (ys.map (λ y, ⟨y, 𝕆⟩)) (z ≔ ⟪ys⟫i; C F βₗ) βₗ
+| (z ≔ reuse x in ⟪ys⟫i; F) βₗ :=
+  Capp (ys.map (λ y, ⟨y, 𝕆⟩)) (z ≔ reuse x in ⟪ys⟫i; C F βₗ) βₗ
 | F βₗ := F
 
-inductive expr_wf (δ : const → fn) : multiset var → expr → Prop
-notation Γ ` ⊢ `:1 e := expr_wf Γ e
-| const_app_full (Γ : multiset var) (ys : list var) (c : const) :
-  (↑ys ⊆ Γ) → (ys.length = (δ c).ys.length)
-  → (Γ ⊢ expr.const_app_full c ys)
-| const_app_part (Γ : multiset var) (c : const) (ys : list var) :
-  (↑ys ⊆ Γ)
-  → (Γ ⊢ expr.const_app_part c ys)
-| var_app (Γ : multiset var) (x y : var) :
-  (x ∈ Γ) → (y ∈ Γ)
-  → (Γ ⊢ expr.var_app x y)
-| ctor_app (Γ : multiset var) (i : ctor) (ys : list var) : 
-  (↑ys ⊆ Γ)
-  → (Γ ⊢ expr.ctor_app i ys)
-| proj (Γ : multiset var) (x : var) (i : ctor) : 
-  (x ∈ Γ)
-  → (Γ ⊢ expr.proj i x)
-| reset (Γ : multiset var) (x : var) :
-  (x ∈ Γ)
-  → (Γ ⊢ expr.reset x)
-| reuse (Γ : multiset var) (x : var) (i : ctor) (ys : list var) :
-  (↑ys ⊆ Γ) → (x ∈ Γ)
-  → (Γ ⊢ expr.reuse x i ys)
-
-notation δ `; ` Γ ` ⊢ `:1 e := expr_wf δ Γ e
-
-inductive fn_body_wf (δ : const → fn) : multiset var → fn_body → Prop
-notation Γ ` ⊢ `:1 f := fn_body_wf Γ f
-| return (Γ : multiset var) (x : var) : 
-  (x ∈ Γ)
-  → (Γ ⊢ fn_body.return x)
-| «let» (Γ : multiset var) (z : var) (e : expr) (F : fn_body) :
-  (δ; Γ ⊢ e) → (z ∈ FV F) → (z ∉ Γ) → (z :: Γ ⊢ F)
-  → (Γ ⊢ fn_body.let z e F)
-| case (Γ : multiset var) (x : var) (Fs : list fn_body):
-  (x ∈ Γ) → (∀ F ∈ Fs, Γ ⊢ F)
-  → (Γ ⊢ fn_body.case x Fs)
-
-
-notation δ `; ` Γ ` ⊢ `:1 f := fn_body_wf δ Γ f
-
-inductive fn_wf (δ : const → fn) : fn → Prop
-notation ` ⊢ `:1 f := fn_wf f
-| fn (f : fn) : (δ; f.ys ⊢ f.F) → (⊢ f)
-
-notation δ ` ⊢ `:1 f := fn_wf δ f
-
-inductive const_wf (δ : const → fn) : const → Prop
-notation ` ⊢ `:1 c := const_wf c
-| const (c : const) : (δ ⊢ δ c) → (⊢ c)
-
-notation δ ` ⊢ `:1 c := const_wf δ c
-
-inductive reuse_fn_body_wf : multiset var → fn_body → Prop
-notation Γ ` ⊢ᵣ `:1 f := reuse_fn_body_wf Γ f
-| return (Γ : multiset var) (x : var) : Γ ⊢ᵣ fn_body.return x
-| let_reset (Γ : multiset var) (z x : var) (F : fn_body) :
-  (z :: Γ ⊢ᵣ F)
-  → (Γ ⊢ᵣ fn_body.let z (expr.reset x) F)
-| let_reuse (Γ : multiset var) (z x : var) (F : fn_body) (i : ctor) (ys : list var) :
-  (Γ ⊢ᵣ F)
-  → (x :: Γ ⊢ᵣ fn_body.let z (expr.reuse x i ys) F)
-| let_const_app_full (Γ : multiset var) (F : fn_body) (z : var) (c : const) (ys : list var) :
-  (Γ ⊢ᵣ F)
-  → (Γ ⊢ᵣ fn_body.let z (expr.const_app_full c ys) F)
-| let_const_app_part (Γ : multiset var) (F : fn_body) (z : var) (c : const) (ys : list var) :
-  (Γ ⊢ᵣ F)
-  → (Γ ⊢ᵣ fn_body.let z (expr.const_app_part c ys) F)
-| let_var_app (Γ : multiset var) (F : fn_body) (z x y : var) :
-  (Γ ⊢ᵣ F)
-  → (Γ ⊢ᵣ fn_body.let z (expr.var_app x y) F)
-| let_ctor_app (Γ : multiset var) (F : fn_body) (z : var) (i : ctor) (ys : list var) :
-  (Γ ⊢ᵣ F)
-  → (Γ ⊢ᵣ fn_body.let z (expr.ctor_app i ys) F)
-| let_proj (Γ : multiset var) (F : fn_body) (z x : var) (i : ctor) :
-  (Γ ⊢ᵣ F)
-  → (Γ ⊢ᵣ fn_body.let z (expr.proj i x) F)
-| case (Γ : multiset var) (x : var) (Fs : list fn_body) :
-  (∀ F ∈ Fs, Γ ⊢ᵣ F)
-  → (Γ ⊢ᵣ fn_body.case x Fs)
-
-notation Γ ` ⊢ᵣ `:1 f := reuse_fn_body_wf Γ f
-
-inductive reuse_const_wf (δ : const → fn) : const → Prop
-notation ` ⊢ᵣ `:1 c := reuse_const_wf c
-| const (c : const) :
-  (δ; ∅ ⊢ (δ c).F) → (∅ ⊢ᵣ (δ c).F)
-  → (⊢ᵣ c)
-
-notation δ ` ⊢ᵣ `:1 c := reuse_const_wf δ c
-
 constant δ : const → fn
+
+section FV
 
 open multiset
 open list
@@ -355,10 +458,10 @@ open list
 theorem FV_e {Γ : multiset var} {e : expr} (h : δ; Γ ⊢ e) :
   ↑(FV_expr e) ⊆ Γ :=
 begin
-  induction e; 
+  induction e;
   apply subset_iff.mpr; 
   intros x h₁;
-  simp [FV_expr] at h₁;
+  simp at h₁;
   cases h,
   { replace h_a := subset_iff.mp h_a,
     exact h_a h₁ },
@@ -380,10 +483,10 @@ theorem FV_F {Γ : multiset var} {F : fn_body} (h : δ; Γ ⊢ F) :
   ↑(FV F) ⊆ Γ :=
 begin
   with_cases { induction F using rc_correctness.fn_body.rec_wf generalizing Γ },
-  case return : x {
+  case ret : x {
     apply subset_iff.mpr,
     intros y h₁, 
-    simp [FV] at h₁,
+    simp at h₁,
     rw h₁,
     cases h,
     assumption
@@ -391,7 +494,7 @@ begin
   case «let» : x e F ih {
     apply subset_iff.mpr,
     intros y h₁, 
-    simp [FV] at h₁,
+    simp at h₁,
     cases h,
     cases h₁,
     case or.inl { 
@@ -410,10 +513,10 @@ begin
       { assumption }
     }
   },
-  case case : x Fs ih {
+  case «case» : x Fs ih {
     apply subset_iff.mpr,
     intros y h₁, 
-    simp [FV] at h₁,
+    simp at h₁,
     cases h,
     replace h₁ := mem_insert_iff.mp h₁,
     cases h₁,
@@ -433,11 +536,120 @@ begin
       exact FV_a_sub_Γ y_in_l
     },
   },
-  case inc : x F ih {
-    cases h
+  case «inc» : x F ih {
+    apply subset_iff.mpr,
+    intros y h₁, 
+    simp at h₁,
+    cases h,
+    replace h₁ := mem_insert_iff.mp h₁,
+    cases h₁,
+    { rw h₁,
+      assumption },
+    { have h₂ : ↑(FV F) ⊆ Γ, from ih h_a_1,
+      replace h₂ := subset_iff.mp h₂,
+      exact h₂ h₁ }
   },
-  case dec : x F ih {
-    cases h
+  case «dec» : x F ih {
+    apply subset_iff.mpr,
+    intros y h₁, 
+    simp at h₁,
+    cases h,
+    replace h₁ := mem_insert_iff.mp h₁,
+    cases h₁,
+    { rw h₁,
+      assumption },
+    { have h₂ : ↑(FV F) ⊆ Γ, from ih h_a_1,
+      replace h₂ := subset_iff.mp h₂,
+      exact h₂ h₁ }
+  }
+end
+
+end FV
+
+constant β : const → var → ob_lin_type
+constant βₗ : var → ob_lin_type -- chosen arbitrarily so far, will have to adjust later
+
+open list
+
+theorem insert_singleton {x y : var} : x ∈ insert y (list.cons y nil) ↔ x = y :=
+begin
+  apply iff.intro;
+  intro h,
+  { have h₁ : y ∈ [y], from list.mem_singleton_self y, 
+    rw list.insert_of_mem h₁ at h,
+    exact eq_of_mem_singleton h },
+  { rw h,
+    have h₁ : y ∈ [y], from list.mem_singleton_self y,
+    rw list.insert_of_mem h₁,
+    assumption }
+end
+
+theorem C_no_new_vars (F : fn_body) : ∀ x : var, x ∈ FV (C β F βₗ) ↔ x ∈ FV F :=
+begin
+  with_cases { induction F using rc_correctness.fn_body.rec_wf },
+  case ret : x y {
+    simp,
+    split_ifs;
+    simp,
+    apply iff.intro;
+    intro h₁,
+    { exact insert_singleton.mp h₁ }, 
+    { exact insert_singleton.mpr h₁ }
+  },
+  case «let» : x e F ih y {
+    simp, 
+    induction e,
+    case rc_correctness.expr.const_app_full {
+      sorry
+    },
+    case rc_correctness.expr.const_app_part {
+      sorry
+    },
+    case rc_correctness.expr.var_app {
+      simp, 
+      split_ifs;
+      simp at *;
+      rw ih at *,
+      { simp [or.assoc] },
+      { apply iff.intro;
+        intro h_2,
+        { replace h_2 := eq_or_mem_of_mem_insert h_2,
+          cases h_2,
+          { exact or.inl (or.inr h_2) },
+          replace h_2 := eq_or_mem_of_mem_insert h_2,
+          cases h_2,
+          { exact or.inl (or.inl h_2) },
+          replace h_2 := eq_or_mem_of_mem_insert h_2,
+          cases h_2, 
+          { exact or.inl (or.inr h_2) },
+          simp [ih, mem_filter] at h_2, 
+          exact or.inr h_2 },
+        sorry }, -- cases timeout?
+      sorry
+    },
+    case rc_correctness.expr.ctor {
+      apply iff.intro;
+      intro h;
+      simp at *,
+      sorry -- map?
+    },
+    case rc_correctness.expr.proj {
+      simp at *, 
+      split_ifs; 
+      simp,
+      sorry
+    }, 
+    sorry
+    
+  },
+  case «case» {
+    sorry
+  },
+  case «inc» {
+    simp
+  },
+  case «dec» {
+    simp
   }
 end
 
