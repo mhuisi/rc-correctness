@@ -588,16 +588,6 @@ begin
     exact insert_eq_of_mem h }
 end
 
--- def Capp : list (var × ob_lin_type) → fn_body → (var → ob_lin_type) → fn_body
--- | [] (z ≔ e; F) βₗ := z ≔ e; F
--- | ((y, t)::xs) (z ≔ e; F) βₗ := 
---   if t = 𝕆 then
---     let ys := xs.map (λ ⟨x, b⟩, x) in 
---       𝕆plus y (ys.to_finset ∪ FV F) (Capp xs (z ≔ e; F) βₗ) βₗ
---   else
---     Capp xs (z ≔ e; 𝕆minus_var y F βₗ) βₗ
--- | xs F βₗ := F
-
 lemma FV_Capp_eq_FV {xs : list (var × ob_lin_type)} {z : var} {e : expr} {F1 F2 : fn_body} (βₗ : var → ob_lin_type)
   (heq : FV F1 = FV F2) (h : ∀ xτ ∈ xs, (xτ : var × ob_lin_type).1 ∈ FV (z ≔ e; F1)) : 
   FV (Capp xs (z ≔ e; F1) βₗ) = FV (z ≔ e; F2) :=
@@ -631,13 +621,6 @@ begin
         rwa FV_dec_eq_FV x_in_FV } },
     { exact xs_ih heq h } }
 end
-
--- @[simp] def FV : fn_body → finset var
--- | (ret x) := {x}
--- | (x ≔ e; F) := FV_expr e ∪ ((FV F).erase x)
--- | (case x of Fs) := insert x (join_finset (Fs.map_wf (λ F h, FV F)))
--- | (inc x; F) := insert x (FV F)
--- | (dec x; F) := insert x (FV F)
 
 theorem C_no_new_vars (F : fn_body) (βₗ : var → ob_lin_type) : FV (C β F βₗ) = FV F :=
 begin
