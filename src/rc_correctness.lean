@@ -124,29 +124,29 @@ def {l} fn_body.rec_wf (C : fn_body → Sort l)
 
 def join_finset {α : Type*} [decidable_eq α] (xs : list (finset α)) : finset α := xs.foldr (∪) ∅ 
 
-@[simp] theorem f {α : Type*} [decidable_eq α] {x : α} {xs : list (finset α)} : x ∈ join_finset xs ↔ ∃ S ∈ xs, x ∈ S :=
+@[simp] theorem mem_join_finset {α : Type*} [decidable_eq α] {x : α} {xs : list (finset α)} : x ∈ join_finset xs ↔ ∃ S ∈ xs, x ∈ S :=
 begin
-apply iff.intro,
-{ intro h, 
-  induction xs; 
-  simp [join_finset] at *,
-  { assumption },
-  { cases h, 
-    { exact ⟨xs_hd, ⟨or.inl rfl, h⟩⟩ },
-    { have h₁, from xs_ih h,
-      cases h₁, 
-      cases h₁_h,
-      exact ⟨h₁_w, ⟨or.inr h₁_h_left, h₁_h_right⟩ ⟩ } } },
-{ intro h,
-  induction xs;
-  simp [join_finset] at *,
-  { assumption },
-  { cases h,
-    cases h_h,
-    cases h_h_left,
-    { rw h_h_left at h_h_right, 
-      exact or.inl h_h_right },
-    { exact or.inr (xs_ih h_w h_h_left h_h_right)} } }
+  apply iff.intro,
+  { intro h, 
+    induction xs; 
+    simp [join_finset] at *,
+    { assumption },
+    { cases h, 
+      { exact ⟨xs_hd, ⟨or.inl rfl, h⟩⟩ },
+      { have h₁, from xs_ih h,
+        cases h₁, 
+        cases h₁_h,
+        exact ⟨h₁_w, ⟨or.inr h₁_h_left, h₁_h_right⟩ ⟩ } } },
+  { intro h,
+    induction xs;
+    simp [join_finset] at *,
+    { assumption },
+    { cases h,
+      cases h_h,
+      cases h_h_left,
+      { rw h_h_left at h_h_right, 
+        exact or.inl h_h_right },
+      { exact or.inr (xs_ih h_w h_h_left h_h_right)} } }
 end
 
 @[simp] def FV : fn_body → finset var
@@ -363,8 +363,8 @@ notation f `[` a `↦` b `]` := function.update f a b
     y ≔ x[i]; inc y; 𝕆minus_var x (C F βₗ) βₗ
   else
     y ≔ x[i]; C F (βₗ[y ↦ 𝔹])
-| (y ≔ reset x; F) βₗ := y ≔ 
-  reset x; C F βₗ
+| (y ≔ reset x; F) βₗ := 
+  y ≔ reset x; C F βₗ
 | (z ≔ c⟦ys…⟧; F) βₗ := 
   Capp (ys.map (λ y, ⟨y, β c y⟩)) (z ≔ c⟦ys…⟧; C F βₗ) βₗ
 | (z ≔ c⟦ys…, _⟧; F) βₗ := 
@@ -386,7 +386,8 @@ section FV
 open finset
 open list
 
-theorem FV_subset_finset_var {Γ Δ : finset var} {F : fn_body} (h : β; δ; Γ; Δ ⊢ F) : 
+theorem FV_subset_finset_var {Γ Δ : finset var} {F : fn_body} 
+  (h : β; δ; Γ; Δ ⊢ F) : 
   FV F ⊆ Γ :=
 begin
   with_cases { induction F using rc_correctness.fn_body.rec_wf generalizing Γ Δ },
@@ -491,7 +492,8 @@ begin
   simp
 end
 
-lemma erase_insert_eq_insert_erase {α : Type*} [decidable_eq α] {a b : α} (s : finset α) (h : a ≠ b) :
+lemma erase_insert_eq_insert_erase {α : Type*} [decidable_eq α] {a b : α} (s : finset α) 
+  (h : a ≠ b) :
   erase (insert a s) b = insert a (erase s b) :=
 begin
   ext,
@@ -506,110 +508,234 @@ begin
   { exact or.inr h₁ }
 end
 
+lemma FV_𝕆plus_eq_FV {x : var} {F : fn_body} (V : finset var) (βₗ : var → ob_lin_type) 
+  (h : x ∈ FV F) :
+  FV (𝕆plus x V F βₗ) = FV F :=
+begin
+  unfold 𝕆plus,
+  split_ifs,
+  { refl },
+  unfold FV,
+  exact insert_eq_of_mem h
+end
+
+-- cool sort lemmas that i didn't need in the end that are useful for
+-- induction over a finset in a sort
+lemma sort_empty {α : Type*} (r : α → α → Prop) [decidable_rel r]
+  [is_trans α r] [is_antisymm α r] [is_total α r] :
+  sort r ∅ = [] :=
+begin
+  apply (multiset.coe_eq_zero (sort r ∅)).mp,
+  simp only [sort_eq, empty_val]
+end
+
+lemma sort_split {α : Type*} [decidable_eq α] (p : α → α → Prop) [decidable_rel p]
+  [is_trans α p] [is_antisymm α p] [is_total α p]
+  (a : α) (s : finset α) :
+  ∃ l r : list α, sort p (insert a s) = l ++ a :: r :=
+list.mem_split ((mem_sort p).mpr (mem_insert_self a s))
+
+lemma FV_𝕆minus_sub_vars_FV (vars : list var) (F : fn_body) (βₗ : var → ob_lin_type) 
+  : FV (𝕆minus vars F βₗ) ⊆ vars.to_finset ∪ FV F :=
+begin
+  apply subset_iff.mpr,
+  intros x h,
+  unfold 𝕆minus 𝕆minus_var at h,
+  induction vars,
+  { rw list.foldr_nil _ F at h, 
+    simpa only [list.to_finset_nil, empty_union] },
+  { simp only [mem_union, mem_insert, insert_union, list.mem_to_finset, list.to_finset_cons],
+    rw list.foldr_cons _ F _ at h, 
+    split_ifs at h,
+    { cases h_1 with vars_hd_𝕆 h2,
+      simp only [FV, mem_insert] at h,
+      cases h, 
+      { exact or.inl h },
+      have x_tl_or_FV_F, from vars_ih h,
+      simp only [mem_union, list.mem_to_finset] at x_tl_or_FV_F, 
+      exact or.inr x_tl_or_FV_F },
+    { have x_tl_or_FV_F, from vars_ih h,
+      simp only [mem_union, list.mem_to_finset] at x_tl_or_FV_F, 
+      exact or.inr x_tl_or_FV_F } }
+end
+
+lemma FV_sub_FV_𝕆minus (vars : list var) (F : fn_body) (βₗ : var → ob_lin_type) 
+  : FV F ⊆ FV (𝕆minus vars F βₗ) :=
+begin
+  apply subset_iff.mpr,
+  intros x h,
+  simp,
+  induction vars,
+  { simpa only [list.foldr_nil] },
+  simp only [list.foldr_cons],
+  split_ifs,
+  { simp only [FV, mem_insert],
+    exact or.inr vars_ih },
+  { exact vars_ih }
+end
+
+lemma FV_dec_eq_FV {e : expr} {x z : var} {F : fn_body} 
+  (h : x ∈ FV_expr e ∪ erase (FV F) z) : 
+  FV_expr e ∪ erase (FV (dec x; F)) z = FV_expr e ∪ erase (FV F) z :=
+begin
+  unfold FV, 
+  have hem : x = z ∨ x ≠ z, from dec_em (x = z),
+  cases hem,
+  { rw hem,
+    rw erase_insert_eq_erase },
+  { rw erase_insert_eq_insert_erase _ hem,
+    simp only [union_insert],
+    exact insert_eq_of_mem h }
+end
+
+-- def Capp : list (var × ob_lin_type) → fn_body → (var → ob_lin_type) → fn_body
+-- | [] (z ≔ e; F) βₗ := z ≔ e; F
+-- | ((y, t)::xs) (z ≔ e; F) βₗ := 
+--   if t = 𝕆 then
+--     let ys := xs.map (λ ⟨x, b⟩, x) in 
+--       𝕆plus y (ys.to_finset ∪ FV F) (Capp xs (z ≔ e; F) βₗ) βₗ
+--   else
+--     Capp xs (z ≔ e; 𝕆minus_var y F βₗ) βₗ
+-- | xs F βₗ := F
+
+lemma FV_Capp_eq_FV {xs : list (var × ob_lin_type)} {z : var} {e : expr} {F1 F2 : fn_body} (βₗ : var → ob_lin_type)
+  (heq : FV F1 = FV F2) (h : ∀ xτ ∈ xs, (xτ : var × ob_lin_type).1 ∈ FV (z ≔ e; F1)) : 
+  FV (Capp xs (z ≔ e; F1) βₗ) = FV (z ≔ e; F2) :=
+begin
+  induction xs generalizing F1 F2,
+  { simp only [FV, Capp],
+    rw heq },
+  cases xs_hd with x τ,
+  simp only [list.mem_cons_iff, list.forall_mem_cons'] at h,
+  cases h with x_in_FV h,
+  simp only [Capp, FV] at *, 
+  cases τ,
+  { rw if_pos rfl, -- trivial works for if_false, but not for if_true?
+    unfold 𝕆plus, 
+    split_ifs, -- need to be careful with simplifying. simplification can lead to undecidable props!
+    { exact xs_ih heq h },
+    unfold FV,
+    rw xs_ih heq h,
+    rw heq at x_in_FV,
+    exact insert_eq_of_mem x_in_FV }, 
+  { simp only [𝕆minus_var, if_false], 
+    split_ifs,
+    { suffices h2 : ∀ (xτ : var × ob_lin_type), xτ ∈ xs_tl → xτ.fst ∈ FV_expr e ∪ erase (FV (dec x; F1)) z,
+      { have h3 : FV (dec x; F1) = FV (dec x; F2), from by
+        { unfold FV, rw heq },
+        rw xs_ih h3 h2, 
+        rw heq at x_in_FV,
+        exact FV_dec_eq_FV x_in_FV },
+      { intros yτ yτ_in_tl,
+        have y_in_FV, from h yτ yτ_in_tl,
+        rwa FV_dec_eq_FV x_in_FV } },
+    { exact xs_ih heq h } }
+end
+
+-- @[simp] def FV : fn_body → finset var
+-- | (ret x) := {x}
+-- | (x ≔ e; F) := FV_expr e ∪ ((FV F).erase x)
+-- | (case x of Fs) := insert x (join_finset (Fs.map_wf (λ F h, FV F)))
+-- | (inc x; F) := insert x (FV F)
+-- | (dec x; F) := insert x (FV F)
+
 theorem C_no_new_vars (F : fn_body) (βₗ : var → ob_lin_type) : FV (C β F βₗ) = FV F :=
 begin
   with_cases { induction F using rc_correctness.fn_body.rec_wf generalizing βₗ },
   case ret : x {
-    unfold C FV 𝕆plus, 
+    unfold FV C 𝕆plus, 
     split_ifs;
-    simp
+    simp only [FV, insert_eq_of_mem, insert_empty_eq_singleton, mem_singleton]
+  },
+  case «case» : x Fs ih {
+    unfold C FV, 
+    repeat { rw list.map_wf_eq_map },
+    simp only [list.map_map],
+    ext,
+    apply iff.intro,
+    { intro h, 
+      apply mem_insert.mpr, 
+      replace h := mem_insert.mp h,
+      cases h,
+      { exact or.inl h },
+      { rw mem_join_finset at h, 
+        rcases h with ⟨S, h, a_in_S⟩, 
+        simp only [list.mem_map, function.comp_app] at h,
+        rcases h with ⟨b, b_in_Fs, h⟩, 
+        rw ←h at a_in_S,
+        have h2, from FV_𝕆minus_sub_vars_FV (sort var_le (insert x (join_finset (list.map FV Fs)))) (C β b βₗ) βₗ,
+        rw sort_to_finset _ at h2,
+        have h3, from mem_of_subset h2 a_in_S,
+        simp only [mem_union, mem_insert] at h3, 
+        rcases h3 with ⟨l, m, r⟩,
+        { exact or.inl h3 },
+        { exact or.inr h3 },
+        rw ih b b_in_Fs βₗ at h3,
+        simp only [exists_prop, list.mem_map, mem_join_finset],
+        exact or.inr ⟨FV b, ⟨⟨b, ⟨b_in_Fs, rfl⟩⟩, h3⟩⟩ } },
+    { intro h,
+      apply mem_insert.mpr, 
+      replace h := mem_insert.mp h,
+      cases h,
+      { exact or.inl h },
+      { rw mem_join_finset at h, 
+        rcases h with ⟨S, h, a_in_S⟩, 
+        rw list.mem_map at h,
+        rcases h with ⟨b, ⟨b_in_Fs, FV_b_eq_S⟩⟩,
+        apply or.inr,
+        simp only [mem_join_finset, exists_prop, list.mem_map, function.comp_app],
+        apply exists.intro (FV (𝕆minus (sort var_le (insert x (join_finset (list.map FV Fs)))) (C β b βₗ) βₗ)),
+        apply and.intro,
+        { exact ⟨b, ⟨b_in_Fs, rfl⟩⟩ },
+        rw ←ih b b_in_Fs βₗ at FV_b_eq_S,
+        rw ←FV_b_eq_S at a_in_S,
+        have h, from FV_sub_FV_𝕆minus (sort var_le (insert x (join_finset (list.map FV Fs)))) (C β b βₗ) βₗ,
+        exact mem_of_subset h a_in_S } }
   },
   case «let» : x e F ih {
-    unfold FV, 
-    induction e,
-    case rc_correctness.expr.const_app_full {
-      simp, 
-      have h : ∀ e_gys, e_ys ⊆ e_gys → FV (Capp (list.map (λ (y : var), (y, β e_c y)) e_ys) (x ≔ e_c⟦e_gys…⟧; C β F βₗ) βₗ) =
-        list.to_finset e_gys ∪ erase (FV F) x, 
-      { intros e_gys e_ys_sub_e_gys,
-        induction e_ys;
-        simp,
-        { rw ih },
-        { split_ifs;
-          simp at *;
-          cases e_ys_sub_e_gys,
-          { exact e_ys_ih e_ys_sub_e_gys_right},
-          { rw e_ys_ih e_ys_sub_e_gys_right, 
-            apply insert_eq_of_mem, 
-            apply mem_union_left, 
-            simp, 
-            assumption },
-          { sorry -- pain
-           }, sorry } }, sorry
+    induction e;
+    unfold C;
+    try {
+      apply FV_Capp_eq_FV βₗ (ih βₗ),
+      intros xτ h
+    };
+    try {
+      rw list.mem_map at h,
+      rcases h with ⟨x, ⟨x_in_ys, xτ_def⟩⟩, -- this rcases is super slow :(
+      cases xτ,
+      rw ←xτ_def,
+      simp
     },
-    case rc_correctness.expr.const_app_part {
-      sorry
-    },
-    case rc_correctness.expr.var_app { 
-      simp, 
+    { exact or.inl x_in_ys },
+    { exact or.inl x_in_ys },
+    { simp only [list.mem_cons_iff, list.mem_singleton] at h,
+      simp,
+      cases h;
+      rw h,
+      { exact or.inr (or.inl rfl) },
+      { exact or.inl (rfl) } },
+    { exact or.inl x_in_ys }, 
+    { simp only [FV, C, 𝕆minus_var, FV_expr, insert_empty_eq_singleton], 
       split_ifs; 
-      simp at *; 
-      rw ih at *
-    },
-    case rc_correctness.expr.ctor {
-      simp, 
-      have h : ∀ e_gys, e_ys ⊆ e_gys → FV (Capp (list.map (λ (y : var), (y, 𝕆)) e_ys) (x ≔ ⟪e_gys⟫e_i; C β F βₗ) βₗ) =
-        list.to_finset e_gys ∪ erase (FV F) x, 
-      { intros e_gys e_ys_sub_e_gys,
-        induction e_ys;
-        simp,
-        { rw ih },
-        { split_ifs;
-          simp at *;
-          cases e_ys_sub_e_gys,
-          { exact e_ys_ih e_ys_sub_e_gys_right },
-          { rw e_ys_ih e_ys_sub_e_gys_right, 
-            apply insert_eq_of_mem, 
-            apply mem_union_left, 
-            simp, 
-            assumption } } },
-      exact h e_ys (list.subset_def.mpr (λ a, id))
-    },
-    case rc_correctness.expr.proj {
-      simp, 
-      split_ifs;
-      simp at *;
-      rw ih at *,
-      have h : e_x = x ∨ e_x ≠ x, from dec_em (e_x = x),
-      cases h,
-      { rw h_2, simp },
-      { rw erase_insert_eq_insert_erase (FV F) h_2, 
-        simp }
-    }, 
-    case rc_correctness.expr.reset {
-      simp, rw ih
-    },
-    case rc_correctness.expr.reuse {
-      simp, 
-      have h : ∀ e_gys, e_ys ⊆ e_gys → FV (Capp (list.map (λ (y : var), (y, 𝕆)) e_ys) (x ≔ reuse e_x in ⟪e_gys⟫e_i; C β F βₗ) βₗ) =
-        insert e_x (list.to_finset e_gys ∪ erase (FV F) x), 
-      { intros e_gys e_ys_sub_e_gys,
-        induction e_ys;
-        simp,
-        { rw ih },
-        { split_ifs;
-          simp at *;
-          cases e_ys_sub_e_gys,
-          { exact e_ys_ih e_ys_sub_e_gys_right },
-          { rw e_ys_ih e_ys_sub_e_gys_right, 
-            apply insert_eq_of_mem, 
-            apply mem_insert_of_mem,
-            apply mem_union_left, 
-            simp, 
-            assumption } } },
-      exact h e_ys (list.subset_def.mpr (λ a, id))
-    }
-  },
-  case «case» {
-    simp,
-    sorry
-    -- pain
+      simp only [FV, erase_insert_eq_erase, FV_expr, insert_empty_eq_singleton],
+      { rw ih βₗ at *,
+        have hem : e_x = x ∨ e_x ≠ x, from dec_em (e_x = x),
+        cases hem,
+        { rw hem at *,
+          rw erase_insert_eq_erase },
+        { rw erase_insert_eq_insert_erase _ hem,
+          simp } },
+      { rw ih βₗ },
+      { rw ih (βₗ[x↦𝔹]) }},
+    { unfold FV,
+      rw ih βₗ },
+    { exact or.inr (or.inl x_in_ys) }
   },
   case «inc» {
-    simp
+    simp only [FV, C]
   },
   case «dec» {
-    simp
+    simp only [FV, C]
   }
 end
 
