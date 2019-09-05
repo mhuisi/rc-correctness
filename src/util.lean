@@ -172,7 +172,7 @@ namespace list
     exact ih (filter (not ∘ λ (_x : α), _x ≈ xs_hd) xs_tl) (length_filter_lt_length_cons _ xs_hd xs_tl) h
   end
 
-  lemma groups_equiv_disjoint {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : 
+  lemma groups_equiv_disjoint' {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : 
     ∀ g1 g2 ∈ group xs, (∀ x1 ∈ g1, ∀ x2 ∈ g2, x1 ≈ x2) → g1 = g2 :=
   begin
     intros g1 g2 g1_group g2_group h,
@@ -212,6 +212,19 @@ namespace list
       have h4 : hd ≈ xs_hd, from h hd (mem_cons_self hd tl) xs_hd (mem_cons_self xs_hd _),
       contradiction },
     exact ih _ (length_filter_lt_length_cons _ xs_hd xs_tl) g1_group g2_group
+  end
+
+  lemma groups_equiv_disjoint {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : 
+    ∀ g1 g2 ∈ group xs, (∃ x1 ∈ g1, ∃ x2 ∈ g2, x1 ≈ x2) → g1 = g2 :=
+  begin
+    intros g1 g2 g1_group g2_group h,
+    suffices h : (∀ x1 ∈ g1, ∀ x2 ∈ g2, x1 ≈ x2),
+    { exact groups_equiv_disjoint' xs g1 g2 g1_group g2_group h },
+    intros x1 x1_in_g1 x2 x2_in_g2,
+    rcases h with ⟨y1, y1_in_g1, y2, y2_in_g2, h⟩,
+    calc x1 ≈ y1 : groups_equiv xs g1 g1_group x1 y1 x1_in_g1 y1_in_g1
+        ... ≈ y2 : h
+        ... ≈ x2 : groups_equiv xs g2 g2_group y2 x2 y2_in_g2 x2_in_g2
   end
 end list
 
