@@ -1,5 +1,6 @@
 import tactic.fin_cases
 import logic.function
+import data.nat.basic
 
 namespace list
   open well_founded_tactics
@@ -24,6 +25,138 @@ namespace list
 
   lemma map_wf_eq_map {α β : Type*} [has_sizeof α] {xs : list α} {f : α → β} : map_wf xs (λ a _, f a) = map f xs :=
   by simp only [map_wf, attach, map_pmap, pmap_eq_map]
+
+
+  lemma sizeof_filter_le_sizeof {α : Type*} (p : α → Prop) [decidable_pred p] (xs : list α) : list.sizeof (filter p xs) <= list.sizeof xs :=
+  begin
+    induction xs,
+    { rw list.filter_nil },
+    by_cases p xs_hd,
+    { rw filter_cons_of_pos xs_tl h, 
+      unfold_sizeof,
+      assumption },
+    { rw filter_cons_of_neg xs_tl h,
+      unfold_sizeof,
+      exact le_add_left xs_ih }
+  end
+  
+  def group {α : Type*} [p : setoid α] [decidable_rel p.r] : list α → list (list α) 
+  | []        := []
+  | (x :: xs) := have list.sizeof (filter (not ∘ (≈ x)) xs) < 1 + list.sizeof xs, from 
+    begin 
+      have h : list.sizeof (filter (not ∘ (≈ x)) xs) ≤ list.sizeof xs, from sizeof_filter_le_sizeof _ xs,
+      rw nat.add_comm,
+      rw ←nat.succ_eq_add_one,
+      rwa nat.lt_succ_iff
+    end, (x :: filter (≈ x) xs) :: group (filter (not ∘ (≈ x)) xs)
+
+  lemma sizeof_lt_of_length_lt {α : Type*} {xs ys : list α} (h : length xs < length ys) : list.sizeof xs < list.sizeof ys :=
+  begin
+    induction xs generalizing ys,
+    { induction ys;
+      unfold_sizeof,
+      { exact absurd h (lt_irrefl (length nil)) },
+      induction ys_tl;
+      unfold_sizeof,
+      { exact zero_lt_one },
+      exact nat.zero_lt_one_add (list.sizeof ys_tl_tl) },
+    induction ys;
+    unfold_sizeof,
+    { simp only [add_comm, length] at h, 
+      exact false.elim (nat.not_succ_le_zero (1 + length xs_tl) h) },
+    simp only [add_comm, length, add_lt_add_iff_left] at h,
+    exact xs_ih h
+  end
+
+  @[elab_as_eliminator] def strong_induction_on {α : Type*} {p : list α → Sort*} :
+    ∀ xs : list α, (∀ xs, (∀ ys, length ys < length xs → p ys) → p xs) → p xs
+  | xs := λ ih, ih xs (λ ys h1, 
+    have list.sizeof ys < list.sizeof xs, from sizeof_lt_of_length_lt h1,
+    strong_induction_on ys ih)
+
+  lemma length_filter_le_length {α : Type*} (p : α → Prop) [decidable_pred p] (xs : list α) : 
+    length (filter p xs) <= length xs := 
+  length_le_of_sublist (filter_sublist xs)
+
+  lemma filter_append_not_filter_perm {α : Type*} (p : α → Prop) [decidable_pred p] (xs : list α) : 
+    filter p xs ++ filter (not ∘ p) xs ~ xs :=
+  begin
+    letI := classical.dec_eq α,
+    rw perm_iff_count,
+    intro a,
+    induction xs,
+    { simp only [filter_nil, append_nil] },
+    by_cases p xs_hd,
+    { rw filter_cons_of_pos xs_tl h,
+      rw @filter_cons_of_neg _ (not ∘ p) _ _ xs_tl (non_contradictory_intro h),
+      simp only [cons_append, count_cons'],
+      apply congr_arg (+ ite (a = xs_hd) 1 0),
+      assumption },
+    { rw @filter_cons_of_pos _ (not ∘ p) _ _ xs_tl h,
+      rw filter_cons_of_neg xs_tl h, 
+      simp only [count_append, count_cons'],
+      rw ←add_assoc,
+      apply congr_arg (+ ite (a = xs_hd) 1 0),
+      rwa ←count_append }
+  end
+
+  lemma length_filter_lt_length_cons {α : Type*} (p : α → Prop) [decidable_pred p] (x : α) (xs : list α) : 
+    length (filter p xs) < length (x :: xs) :=
+  calc length (filter p xs) 
+        ≤ length xs        : length_filter_le_length _ xs
+    ... < length (x :: xs) : by simp only [lt_add_iff_pos_left, add_comm, length, nat.zero_lt_one]
+
+  lemma join_group_perm {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : join (group xs) ~ xs :=
+  begin
+    letI := classical.dec_eq α,
+    induction xs using list.strong_induction_on with xs ih,
+    cases xs,
+    { simp only [group, join] },
+    rw perm_iff_count,
+    intro a,
+    simp only [group, cons_append, join, count_cons'],
+    apply congr_arg (+ ite (a = xs_hd) 1 0),
+    simp only [count_append],
+    simp only [] at ih, -- surely there's a better way to eta-reduce
+    replace ih := ih (filter (not ∘ (≈ xs_hd)) xs_tl),
+    have h : length (filter (not ∘ (≈ xs_hd)) xs_tl) < length (xs_hd :: xs_tl),
+    { exact length_filter_lt_length_cons _ xs_hd xs_tl },
+    have perm, from ih h,
+    rw perm_iff_count at perm,
+    rw perm a,
+    rw ←count_append,
+    revert a,
+    rw ←perm_iff_count,
+    exact filter_append_not_filter_perm (≈ xs_hd) xs_tl
+  end
+
+  lemma group_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : 
+    ∀ g ∈ group xs, ∀ x y ∈ g, x ≈ y :=
+  begin
+    intros g g_group x y x_in_g y_in_g,
+    induction xs using list.strong_induction_on with xs ih,
+    cases xs,
+    { simp only [group, not_mem_nil] at g_group,
+      contradiction },
+    simp only [group, mem_cons_iff] at g_group,
+    cases g_group,
+    { rw g_group at *,
+      simp only [mem_cons_iff, mem_filter] at x_in_g y_in_g,
+      cases x_in_g,
+      { rw x_in_g,
+        cases y_in_g,
+        { rw y_in_g },
+        { symmetry,
+          exact y_in_g.right } },
+      { cases y_in_g,
+        { rw ←y_in_g at x_in_g,
+          exact x_in_g.right },
+        { transitivity,
+          { exact x_in_g.right },
+          { symmetry, 
+            exact y_in_g.right } } } },
+    exact ih _ (length_filter_lt_length_cons _ xs_hd xs_tl) g_group
+  end
 end list
 
 

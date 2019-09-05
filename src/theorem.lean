@@ -1,5 +1,5 @@
-import type_system
 import compiler
+import well_foundedness
 
 namespace rc_correctness
 
@@ -271,6 +271,20 @@ begin
   all_goals { intros x F ih βₗ, simp only [FV, C] }
 end
 
-theorem rc_insertion_correctness (β : const → var → ob_lin_type) (δ : const → fn) : β ⊩ C_prog β δ := sorry
+theorem rc_insertion_correctness (β : const → var → ob_lin_type) (δ : const → fn) (wf : β ⊢ δ) : β ⊩ C_prog β δ :=
+begin
+  cases wf,
+  split,
+  intro c,
+  replace wf_const_wf := wf_const_wf c,
+  cases wf_const_wf,
+  rename wf_const_wf_F_wf wf,
+  split,
+  simp only [C_prog],
+  set ys := (δ c).ys with ys_def,
+  set F := (δ c).F with F_def,
+  set F' := C β F (β c) with F'_def,
+  sorry
+end
 
 end rc_correctness

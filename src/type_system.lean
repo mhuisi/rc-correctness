@@ -1,6 +1,17 @@
-import well_foundedness
+import ast
 
 namespace rc_correctness
+
+@[derive decidable_eq]
+inductive ob_lin_type : Type 
+  | 𝕆 | 𝔹
+
+@[derive decidable_eq]
+inductive lin_type : Type
+  | ob : ob_lin_type → lin_type
+  | ℝ : lin_type
+
+instance ob_lin_type_to_lin_type : has_coe ob_lin_type lin_type := ⟨lin_type.ob⟩
 
 structure typed_rc := (c : rc) (ty : lin_type)
 
@@ -88,7 +99,7 @@ notation β `; ` δ ` ⊩ `:1 c := linear_const β δ c
 inductive linear_program (β : const → var → ob_lin_type) : (const → fn) → Prop
 notation ` ⊩ `:1 δ := linear_program δ
 | program (δ : const → fn)
-  (δ_wf : β ⊢ δ) (const_typed : ∀ c : const, (β; δ ⊩ c)) :
+  (const_typed : ∀ c : const, (β; δ ⊩ c)) :
   ⊩ δ
 
 notation β ` ⊩ `:1 δ := linear_program β δ

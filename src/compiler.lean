@@ -1,5 +1,4 @@
-import ast
-import types
+import type_system
 
 namespace rc_correctness
 
