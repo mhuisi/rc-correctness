@@ -130,7 +130,7 @@ namespace list
     exact filter_append_not_filter_perm (≈ xs_hd) xs_tl
   end
 
-  lemma group_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : 
+  lemma groups_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : 
     ∀ g ∈ group xs, ∀ x y ∈ g, x ≈ y :=
   begin
     intros g g_group x y x_in_g y_in_g,
@@ -156,6 +156,62 @@ namespace list
           { symmetry, 
             exact y_in_g.right } } } },
     exact ih _ (length_filter_lt_length_cons _ xs_hd xs_tl) g_group
+  end
+
+  lemma groups_not_nil {α : Type*} [p : setoid α] [decidable_rel p.r] {g : list α} {xs : list α} 
+    (h : g ∈ group xs) : g ≠ [] :=
+  begin
+    induction xs using list.strong_induction_on with xs ih,
+    cases xs,
+    { simp only [group, not_mem_nil] at h,
+      contradiction },
+    simp only [group, mem_cons_iff] at h,
+    cases h,
+    { rw h,
+      simp only [ne.def, not_false_iff] },
+    exact ih (filter (not ∘ λ (_x : α), _x ≈ xs_hd) xs_tl) (length_filter_lt_length_cons _ xs_hd xs_tl) h
+  end
+
+  lemma groups_equiv_disjoint {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : 
+    ∀ g1 g2 ∈ group xs, (∀ x1 ∈ g1, ∀ x2 ∈ g2, x1 ≈ x2) → g1 = g2 :=
+  begin
+    intros g1 g2 g1_group g2_group h,
+    induction xs using list.strong_induction_on with xs ih,
+    cases xs,
+    { simp only [group, not_mem_nil] at g1_group,
+      contradiction },
+    simp only [group, mem_cons_iff] at g1_group g2_group,
+    cases g1_group,
+    { rw g1_group at *,
+      cases g2_group,
+      { rw g2_group at * },
+      { cases h2 : g2,
+        { exact absurd h2 (groups_not_nil g2_group) },
+        rw h2 at *,
+        have h3 : ∃ l, l ∈ group (filter (not ∘ λ (_x : α), _x ≈ xs_hd) xs_tl) ∧ hd ∈ l, 
+        from ⟨hd :: tl, ⟨g2_group, mem_cons_self hd tl⟩⟩,
+        replace h3 := mem_join.mpr h3,
+        rw mem_of_perm (join_group_perm _) at h3,
+        replace h3 := of_mem_filter h3,
+        simp only [function.comp_app] at h3,
+        have h4 : hd ≈ xs_hd, 
+        { symmetry,
+          exact h xs_hd (mem_cons_self xs_hd _) hd (mem_cons_self hd tl) },
+        contradiction } },
+    cases g2_group,
+    rw g2_group at *,
+    { cases h2 : g1,
+      { exact absurd h2 (groups_not_nil g1_group) },
+      rw h2 at *,
+      have h3 : ∃ l, l ∈ group (filter (not ∘ λ (_x : α), _x ≈ xs_hd) xs_tl) ∧ hd ∈ l, 
+      from ⟨hd :: tl, ⟨g1_group, mem_cons_self hd tl⟩⟩,
+      replace h3 := mem_join.mpr h3,
+      rw mem_of_perm (join_group_perm _) at h3,
+      replace h3 := of_mem_filter h3,
+      simp only [function.comp_app] at h3,
+      have h4 : hd ≈ xs_hd, from h hd (mem_cons_self hd tl) xs_hd (mem_cons_self xs_hd _),
+      contradiction },
+    exact ih _ (length_filter_lt_length_cons _ xs_hd xs_tl) g1_group g2_group
   end
 end list
 
