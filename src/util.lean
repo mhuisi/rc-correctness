@@ -117,7 +117,7 @@ namespace list
     simp only [group, cons_append, join, count_cons'],
     apply congr_arg (+ ite (a = xs_hd) 1 0),
     simp only [count_append],
-    simp only [] at ih, -- surely there's a better way to eta-reduce
+    simp only [] at ih,
     replace ih := ih (filter (not ∘ (≈ xs_hd)) xs_tl),
     have h : length (filter (not ∘ (≈ xs_hd)) xs_tl) < length (xs_hd :: xs_tl),
     { exact length_filter_lt_length_cons _ xs_hd xs_tl },
@@ -214,20 +214,79 @@ namespace list
     exact ih _ (length_filter_lt_length_cons _ xs_hd xs_tl) g1_group g2_group
   end
 
-  lemma groups_equiv_disjoint {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : 
-    ∀ g1 g2 ∈ group xs, (∃ x1 ∈ g1, ∃ x2 ∈ g2, x1 ≈ x2) → g1 = g2 :=
+  lemma groups_equiv_disjoint {α : Type*} [p : setoid α] [d : decidable_rel p.r] (xs : list α) : 
+    ∀ g1 g2 ∈ group xs, g1 ≠ g2 → ∀ x1 ∈ g1, ∀ x2 ∈ g2, ¬(x1 ≈ x2) :=
   begin
-    intros g1 g2 g1_group g2_group h,
-    suffices h : (∀ x1 ∈ g1, ∀ x2 ∈ g2, x1 ≈ x2),
-    { exact groups_equiv_disjoint' xs g1 g2 g1_group g2_group h },
-    intros x1 x1_in_g1 x2 x2_in_g2,
-    rcases h with ⟨y1, y1_in_g1, y2, y2_in_g2, h⟩,
-    calc x1 ≈ y1 : groups_equiv xs g1 g1_group x1 y1 x1_in_g1 y1_in_g1
-        ... ≈ y2 : h
-        ... ≈ x2 : groups_equiv xs g2 g2_group y2 x2 y2_in_g2 x2_in_g2
+    intros g1 g2 g1_group g2_group,
+    contrapose,
+    classical,
+    simp only [and_imp, not_imp, not_not, exists_imp_distrib, not_forall],
+    intros x1 x1_in_g1 x2 x2_in_g2 h,
+    suffices g : ∀ x1 ∈ g1, ∀ x2 ∈ g2, x1 ≈ x2,
+    { exact @groups_equiv_disjoint' α p d xs g1 g2 g1_group g2_group g },
+    intros y1 y1_in_g1 y2 y2_in_g2,
+    calc y1 ≈ x1 : @groups_equiv α p d xs g1 g1_group y1 x1 y1_in_g1 x1_in_g1
+        ... ≈ x2 : h
+        ... ≈ y2 : @groups_equiv α p d xs g2 g2_group x2 y2 x2_in_g2 y2_in_g2
+  end
+
+  lemma groups_disjoint {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) :
+    ∀ g1 g2 ∈ group xs, g1 ≠ g2 → disjoint g1 g2 :=
+  begin
+    intros g1 g2 g1_group g2_group g1_neq_g2,
+    have h, from groups_equiv_disjoint xs g1 g2 g1_group g2_group g1_neq_g2,
+    unfold disjoint,
+    intros x x_in_g1 x_in_g2,
+    exact h x x_in_g1 x x_in_g2 (setoid.refl x)
+  end
+
+  lemma nodup_groups {α : Type*} [decidable_eq α] [p : setoid α] [decidable_rel p.r] (xs : list α) :
+    nodup (group xs) :=
+  begin
+    induction xs using list.strong_induction_on with xs ih,
+    cases xs,
+    { simp only [group, list.nodup_nil] },
+    simp only [group, nodup_cons],
+    split,
+    { intro h,
+      have h2 : ∃ l, l ∈ group (filter (not ∘ λ (_x : α), _x ≈ xs_hd) xs_tl) ∧ xs_hd ∈ l, 
+      from ⟨_, ⟨h, mem_cons_self xs_hd _⟩⟩,
+      replace h2 := mem_join.mpr h2,
+      rw mem_of_perm (join_group_perm _) at h2,
+      replace h2 := of_mem_filter h2,
+      simp only [function.comp_app] at h2,
+      exact absurd (setoid.refl xs_hd) h2 },
+    exact ih _ (length_filter_lt_length_cons _ xs_hd xs_tl)
+  end
+
+  lemma groups_perm_iff_groups_sub {α : Type*} [p : setoid α] [decidable_rel p.r] (xs ys : list α) : 
+    group xs ~ group ys ↔ group xs ⊆ group ys ∧ group ys ⊆ group xs :=
+  begin
+    letI := classical.dec_eq α,
+    split,
+    { intro h,
+      exact ⟨perm_subset h, perm_subset h.symm⟩ },
+    rintro ⟨xs_sub_ys, ys_sub_xs⟩,
+    rw perm_iff_count,
+    intro g,
+    have h1, from nat.of_le_succ (nodup_iff_count_le_one.mp (nodup_groups xs) g),
+    have h2, from nat.of_le_succ (nodup_iff_count_le_one.mp (nodup_groups ys) g),
+    rw le_zero_iff_eq at h1 h2, 
+    cases h1,
+    { cases h2,
+      { rw h1, rw h2 },
+      { replace h1 := not_mem_of_count_eq_zero h1,
+        replace h2 := count_pos.mp (h2.symm.subst nat.zero_lt_one),
+        rw subset_def at ys_sub_xs,
+        exact absurd (ys_sub_xs h2) h1 } },
+    { cases h2,
+      { replace h1 := count_pos.mp (h1.symm.subst nat.zero_lt_one),
+        replace h2 := not_mem_of_count_eq_zero h2,
+        rw subset_def at ys_sub_xs,
+        exact absurd (xs_sub_ys h1) h2 },
+      { rw h1, rw h2 } }
   end
 end list
-
 
 namespace finset
   def join {α : Type*} [decidable_eq α] (xs : list (finset α)) : finset α := xs.foldr (∪) ∅ 
