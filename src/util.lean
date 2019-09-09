@@ -130,7 +130,7 @@ namespace list
     exact filter_append_not_filter_perm (≈ xs_hd) xs_tl
   end
 
-  lemma groups_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : 
+  lemma group_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs : list α} : 
     ∀ g ∈ group xs, ∀ x y ∈ g, x ≈ y :=
   begin
     intros g g_group x y x_in_g y_in_g,
@@ -158,21 +158,19 @@ namespace list
     exact ih _ (length_filter_lt_length_cons _ xs_hd xs_tl) g_group
   end
 
-  lemma groups_not_nil {α : Type*} [p : setoid α] [decidable_rel p.r] {g : list α} {xs : list α} 
-    (h : g ∈ group xs) : g ≠ [] :=
+  lemma nil_not_mem_group {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α)
+    : [] ∉ group xs :=
   begin
     induction xs using list.strong_induction_on with xs ih,
     cases xs,
-    { simp only [group, not_mem_nil] at h,
-      contradiction },
-    simp only [group, mem_cons_iff] at h,
-    cases h,
-    { rw h,
-      simp only [ne.def, not_false_iff] },
-    exact ih (filter (not ∘ λ (_x : α), _x ≈ xs_hd) xs_tl) (length_filter_lt_length_cons _ xs_hd xs_tl) h
+    { simp only [group], exact not_mem_nil nil },
+    simp only [group, mem_cons_iff],
+    rw not_or_distrib,
+    simp only [true_and, not_false_iff],
+    exact ih (filter (not ∘ λ (_x : α), _x ≈ xs_hd) xs_tl) (length_filter_lt_length_cons _ xs_hd xs_tl)
   end
 
-  lemma groups_equiv_disjoint' {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : 
+  lemma group_equiv_disjoint' {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : 
     ∀ g1 g2 ∈ group xs, (∀ x1 ∈ g1, ∀ x2 ∈ g2, x1 ≈ x2) → g1 = g2 :=
   begin
     intros g1 g2 g1_group g2_group h,
@@ -185,36 +183,34 @@ namespace list
     { rw g1_group at *,
       cases g2_group,
       { rw g2_group at * },
-      { cases h2 : g2,
-        { exact absurd h2 (groups_not_nil g2_group) },
-        rw h2 at *,
-        have h3 : ∃ l, l ∈ group (filter (not ∘ λ (_x : α), _x ≈ xs_hd) xs_tl) ∧ hd ∈ l, 
-        from ⟨hd :: tl, ⟨g2_group, mem_cons_self hd tl⟩⟩,
+      { cases g2,
+        { exact absurd g2_group (nil_not_mem_group _) },
+        have h3 : ∃ l, l ∈ group (filter (not ∘ λ (_x : α), _x ≈ xs_hd) xs_tl) ∧ g2_hd ∈ l, 
+        from ⟨g2_hd :: g2_tl, ⟨g2_group, mem_cons_self g2_hd g2_tl⟩⟩,
         replace h3 := mem_join.mpr h3,
         rw mem_of_perm (join_group_perm _) at h3,
         replace h3 := of_mem_filter h3,
         simp only [function.comp_app] at h3,
-        have h4 : hd ≈ xs_hd, 
+        have h4 : g2_hd ≈ xs_hd, 
         { symmetry,
-          exact h xs_hd (mem_cons_self xs_hd _) hd (mem_cons_self hd tl) },
+          exact h xs_hd (mem_cons_self xs_hd _) g2_hd (mem_cons_self g2_hd g2_tl) },
         contradiction } },
     cases g2_group,
     rw g2_group at *,
-    { cases h2 : g1,
-      { exact absurd h2 (groups_not_nil g1_group) },
-      rw h2 at *,
-      have h3 : ∃ l, l ∈ group (filter (not ∘ λ (_x : α), _x ≈ xs_hd) xs_tl) ∧ hd ∈ l, 
-      from ⟨hd :: tl, ⟨g1_group, mem_cons_self hd tl⟩⟩,
+    { cases g1,
+      { exact absurd g1_group (nil_not_mem_group _) },
+      have h3 : ∃ l, l ∈ group (filter (not ∘ λ (_x : α), _x ≈ xs_hd) xs_tl) ∧ g1_hd ∈ l, 
+      from ⟨g1_hd :: g1_tl, ⟨g1_group, mem_cons_self g1_hd g1_tl⟩⟩,
       replace h3 := mem_join.mpr h3,
       rw mem_of_perm (join_group_perm _) at h3,
       replace h3 := of_mem_filter h3,
       simp only [function.comp_app] at h3,
-      have h4 : hd ≈ xs_hd, from h hd (mem_cons_self hd tl) xs_hd (mem_cons_self xs_hd _),
+      have h4 : g1_hd ≈ xs_hd, from h g1_hd (mem_cons_self g1_hd g1_tl) xs_hd (mem_cons_self xs_hd _),
       contradiction },
     exact ih _ (length_filter_lt_length_cons _ xs_hd xs_tl) g1_group g2_group
   end
 
-  lemma groups_equiv_disjoint {α : Type*} [p : setoid α] [d : decidable_rel p.r] (xs : list α) : 
+  lemma group_equiv_disjoint {α : Type*} [p : setoid α] [d : decidable_rel p.r] (xs : list α) : 
     ∀ g1 g2 ∈ group xs, g1 ≠ g2 → ∀ x1 ∈ g1, ∀ x2 ∈ g2, ¬(x1 ≈ x2) :=
   begin
     intros g1 g2 g1_group g2_group,
@@ -223,34 +219,29 @@ namespace list
     simp only [and_imp, not_imp, not_not, exists_imp_distrib, not_forall],
     intros x1 x1_in_g1 x2 x2_in_g2 h,
     suffices g : ∀ x1 ∈ g1, ∀ x2 ∈ g2, x1 ≈ x2,
-    { exact @groups_equiv_disjoint' α p d xs g1 g2 g1_group g2_group g },
+    { exact @group_equiv_disjoint' α p d xs g1 g2 g1_group g2_group g },
     intros y1 y1_in_g1 y2 y2_in_g2,
-    calc y1 ≈ x1 : @groups_equiv α p d xs g1 g1_group y1 x1 y1_in_g1 x1_in_g1
+    calc y1 ≈ x1 : @group_equiv α p d xs g1 g1_group y1 x1 y1_in_g1 x1_in_g1
         ... ≈ x2 : h
-        ... ≈ y2 : @groups_equiv α p d xs g2 g2_group x2 y2 x2_in_g2 y2_in_g2
+        ... ≈ y2 : @group_equiv α p d xs g2 g2_group x2 y2 x2_in_g2 y2_in_g2
   end
 
-  lemma groups_disjoint {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) :
-    ∀ g1 g2 ∈ group xs, g1 ≠ g2 → disjoint g1 g2 :=
-  begin
-    intros g1 g2 g1_group g2_group g1_neq_g2,
-    have h, from groups_equiv_disjoint xs g1 g2 g1_group g2_group g1_neq_g2,
-    unfold disjoint,
-    intros x x_in_g1 x_in_g2,
-    exact h x x_in_g1 x x_in_g2 (setoid.refl x)
-  end
-
-  lemma nodup_groups {α : Type*} [decidable_eq α] [p : setoid α] [decidable_rel p.r] (xs : list α) :
-    nodup (group xs) :=
+  lemma nodup_perm_group {α : Type*} [decidable_eq α] [p : setoid α] [decidable_rel p.r] (xs : list α) : 
+    pairwise (λ a b, ¬(a ~ b)) (group xs) :=
   begin
     induction xs using list.strong_induction_on with xs ih,
     cases xs,
-    { simp only [group, list.nodup_nil] },
-    simp only [group, nodup_cons],
+    { simp only [group],
+      exact pairwise.nil },
+    simp only [group, pairwise_cons],
     split,
-    { intro h,
+    { intros a h h',
       have h2 : ∃ l, l ∈ group (filter (not ∘ λ (_x : α), _x ≈ xs_hd) xs_tl) ∧ xs_hd ∈ l, 
-      from ⟨_, ⟨h, mem_cons_self xs_hd _⟩⟩,
+      { use a,
+        split,
+        { assumption },
+        rw mem_of_perm h'.symm, 
+        exact mem_cons_self xs_hd _ },
       replace h2 := mem_join.mpr h2,
       rw mem_of_perm (join_group_perm _) at h2,
       replace h2 := of_mem_filter h2,
@@ -259,7 +250,45 @@ namespace list
     exact ih _ (length_filter_lt_length_cons _ xs_hd xs_tl)
   end
 
-  lemma groups_perm_iff_groups_sub {α : Type*} [p : setoid α] [decidable_rel p.r] (xs ys : list α) : 
+  lemma nodup_group {α : Type*} [decidable_eq α] [p : setoid α] [decidable_rel p.r] (xs : list α) :
+    nodup (group xs) :=
+  begin
+    have h, from nodup_perm_group xs,
+    unfold nodup,
+    have h' : ∀ a b, (λ (a b : list α), ¬a ~ b) a b → ne a b,
+    { intros a b h' a_eq_b,
+      rw a_eq_b at h',
+      exact h' (setoid.refl b) },
+    exact pairwise.imp h' h
+  end
+
+  lemma pairwise_equiv_disjoint_group {α : Type*} [decidable_eq α] [p : setoid α] [decidable_rel p.r] (xs : list α) :
+    pairwise (λ g1 g2 : list α, ∀ x1 ∈ g1, ∀ x2 ∈ g2, ¬(x1 ≈ x2)) (group xs) :=
+  begin
+    have h, from nodup_perm_group xs,
+    suffices h' : ∀ g1 g2, g1 ∈ group xs → g2 ∈ group xs → ¬(g1 ~ g2) → ∀ x1 ∈ g1, ∀ x2 ∈ g2, ¬(x1 ≈ x2),
+    { exact pairwise.imp_of_mem h' h },
+    intros g1 g2 g1_group g2_group g1_not_perm_g2,
+    have g1_neq_g2 : g1 ≠ g2,
+    { intro h',
+      rw h' at g1_not_perm_g2,
+      exact absurd (setoid.refl g2) g1_not_perm_g2 },
+    exact group_equiv_disjoint xs g1 g2 g1_group g2_group g1_neq_g2
+  end
+
+  lemma pairwise_disjoint_group {α : Type*} [decidable_eq α] [p : setoid α] [decidable_rel p.r] (xs : list α) :
+    pairwise disjoint (group xs) :=
+  begin
+    have h, from pairwise_equiv_disjoint_group xs,
+    suffices h' : ∀ g1 g2 : list α, (∀ (x1 : α), x1 ∈ g1 → ∀ (x2 : α), x2 ∈ g2 → ¬x1 ≈ x2) → disjoint g1 g2,
+    { exact pairwise.imp h' h },
+    intros g1 g2 h',
+    unfold disjoint,
+    intros a a_in_g1 a_in_g2,
+    exact absurd (setoid.refl a) (h' a a_in_g1 a a_in_g2)
+  end
+
+  lemma group_perm_iff_group_sub {α : Type*} [p : setoid α] [decidable_rel p.r] (xs ys : list α) : 
     group xs ~ group ys ↔ group xs ⊆ group ys ∧ group ys ⊆ group xs :=
   begin
     letI := classical.dec_eq α,
@@ -269,8 +298,8 @@ namespace list
     rintro ⟨xs_sub_ys, ys_sub_xs⟩,
     rw perm_iff_count,
     intro g,
-    have h1, from nat.of_le_succ (nodup_iff_count_le_one.mp (nodup_groups xs) g),
-    have h2, from nat.of_le_succ (nodup_iff_count_le_one.mp (nodup_groups ys) g),
+    have h1, from nat.of_le_succ (nodup_iff_count_le_one.mp (nodup_group xs) g),
+    have h2, from nat.of_le_succ (nodup_iff_count_le_one.mp (nodup_group ys) g),
     rw le_zero_iff_eq at h1 h2, 
     cases h1,
     { cases h2,
@@ -286,7 +315,256 @@ namespace list
         exact absurd (xs_sub_ys h1) h2 },
       { rw h1, rw h2 } }
   end
+
+  lemma filter_equiv_mem_group {α : Type*} [p : setoid α] [decidable_rel p.r] {x : α} {xs : list α} (h : x ∈ xs) : 
+    filter (≈ x) xs ∈ group xs :=
+  begin
+    induction xs using list.strong_induction_on with xs ih,
+    cases xs,
+    { simp only [not_mem_nil] at h, contradiction },
+    simp only [group, mem_cons_iff],
+    by_cases h_equiv : xs_hd ≈ x,
+    { apply or.inl,
+      have g : ∀ y ∈ xs_tl, y ≈ xs_hd ↔ y ≈ x,
+      { intros y y_in_tl,
+        split;
+        intro g,
+        { transitivity, exact g, exact h_equiv },
+        { transitivity, exact g, exact (setoid.symm h_equiv) } },
+      rw filter_congr g,
+      apply filter_cons_of_pos,
+      assumption },
+    apply or.inr,
+    rw @filter_cons_of_neg _ (λ y, y ≈ x) _ xs_hd xs_tl h_equiv,
+    simp only [mem_cons_iff] at h,
+    cases h,
+    { rw h at h_equiv,
+      exact absurd (setoid.refl xs_hd) h_equiv },
+    have h' : x ∈ filter (not ∘ λ (_x : α), _x ≈ xs_hd) xs_tl,
+    { apply mem_filter_of_mem h,
+      simp only [function.comp_app],
+      intro h',
+      exact absurd (setoid.symm h') h_equiv },
+    have g, from ih _ (length_filter_lt_length_cons _ xs_hd xs_tl) h', 
+    rw filter_filter at g,
+    simp only [function.comp_app] at g,
+    have g' : ∀ y ∈ xs_tl, (y ≈ x ∧ ¬y ≈ xs_hd) ↔ y ≈ x,
+    { intros y y_in_tl,
+      split,
+      { intro h'',
+        exact h''.left },
+      intro y_eq_x,
+      split,
+      { assumption },
+      intro h'',
+      exact absurd (setoid.trans (setoid.symm h'') y_eq_x) h_equiv },
+    rwa filter_congr g' at g
+  end
+
+  lemma cons_eq_filter_of_group {α : Type*} [p : setoid α] [decidable_rel p.r] {g_hd : α} {xs g_tl : list α} 
+    (h : (g_hd :: g_tl : list α) ∈ group xs) : 
+    (g_hd :: g_tl : list α) = filter (≈ g_hd) xs :=
+  begin
+    induction xs using list.strong_induction_on with xs ih,
+    cases xs,
+    { simp only [group, not_mem_nil] at h, contradiction },
+    simp only [group, mem_cons_iff] at h, 
+    rcases h with ⟨hd_eq, h⟩,
+    { rw hd_eq at *,
+      rw h at *,
+      exact (@filter_cons_of_pos _ (≈ xs_hd) _ _ xs_tl (setoid.refl xs_hd)).symm },
+    have g : (g_hd :: g_tl : list α) = _, from ih _ (length_filter_lt_length_cons _ xs_hd xs_tl) h,
+    rw g,
+    simp only [filter_filter, function.comp_app] at *,
+    by_cases g' : xs_hd ≈ g_hd,
+    { have eqv : ∀ y ∈ xs_tl, (y ≈ g_hd ∧ ¬y ≈ xs_hd) ↔ false,
+      { intros y y_in_tl,
+        split,
+        { rintros ⟨a, b⟩,
+          exact absurd (setoid.trans a (setoid.symm g')) b },
+        { intro f, contradiction } },
+       rw filter_congr eqv at g, 
+       simp only [filter_false] at g,
+       contradiction },
+    rw @filter_cons_of_neg _ (λ y, y ≈ g_hd) _ xs_hd xs_tl g',
+    have eqv : ∀ y ∈ xs_tl, (y ≈ g_hd ∧ ¬y ≈ xs_hd) ↔ y ≈ g_hd,
+    { intros y y_in_tl,
+      split,
+      { intro x, exact x.left },
+      { intro y_eq_g_hd, 
+        split,
+        { assumption },
+        { intro y_eq_xs_hd,
+          exact absurd (setoid.trans (setoid.symm y_eq_xs_hd) y_eq_g_hd) g' } } },
+    rw filter_congr eqv
+  end
+
+  lemma group_perm_of_perm {α : Type*} [p : setoid α] [decidable_rel p.r] {xs ys : list α} (h : xs ~ ys) :
+    ∀ gx ∈ group xs, ∃ gy ∈ group ys, gx ~ gy :=
+  begin
+    intros gx gx_group,
+    cases gx,
+    { exact absurd gx_group (nil_not_mem_group xs) },
+    set gy := filter (≈ gx_hd) ys with gy_def,
+    use gy,
+    have g : gx_hd ∈ ys,
+    from (mem_of_perm h).mp 
+      ((mem_of_perm (join_group_perm xs)).mp 
+        (mem_join_of_mem gx_group (mem_cons_self gx_hd gx_tl))),
+    use filter_equiv_mem_group g,
+    rw gy_def,
+    rw cons_eq_filter_of_group gx_group,
+    apply perm_filter,
+    assumption
+  end
 end list
+
+namespace multiset
+  def group' {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : multiset (multiset α) :=
+  ↑(list.map (λ g, (↑g : multiset α)) (list.group xs))
+
+  lemma nodup_map_coe_of_perm_nodup {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list (list α)) (h : list.pairwise (λ a b, ¬(a ~ b)) xs) : 
+    list.nodup (list.map coe xs : list (multiset α)) :=
+  begin
+    letI := classical.dec_eq α,
+    rw list.nodup_iff_count_le_one,
+    intro s,
+    induction xs,
+    { simp only [list.not_mem_nil, list.count_eq_zero_of_not_mem, zero_le, not_false_iff, list.map, zero_le_one] },
+    simp only [list.map],
+    rw list.count_cons,
+    split_ifs,
+    { apply nat.succ_le_succ,
+      simp only [le_zero_iff_eq],
+      rw list.count_eq_zero_of_not_mem,
+      rw h_1 at *,
+      simp only [not_exists, coe_eq_coe, list.mem_map, not_and],
+      intros a a_in_tl,
+      replace h := list.rel_of_pairwise_cons h a_in_tl,
+      intro h',
+      exact absurd (h'.symm) h },
+    { exact xs_ih (list.pairwise_of_pairwise_cons h) }
+  end
+
+  lemma group'_eq_of_perm {α : Type*} [p : setoid α] [decidable_rel p.r] {xs ys : list α} (h : xs ~ ys) : group' xs = group' ys :=
+  begin
+    letI := classical.dec_eq α,
+    unfold group',
+    simp only [coe_eq_coe],
+    rw list.perm_ext (nodup_map_coe_of_perm_nodup _ (list.nodup_perm_group xs)) 
+      (nodup_map_coe_of_perm_nodup _ (list.nodup_perm_group ys)),
+    simp only [list.mem_map], 
+    intro s,
+    split,
+    { rintro ⟨ax, ax_group, ax_eq_s⟩,
+      rcases list.group_perm_of_perm h ax ax_group with ⟨ay, ⟨ay_group, ax_eq_ay⟩⟩,
+      use [ay, ay_group],
+      rw ←coe_eq_coe at ax_eq_ay,
+      rw ←ax_eq_ay,
+      assumption },
+    { rintro ⟨ay, ay_group, ay_eq_s⟩,
+      rcases list.group_perm_of_perm h.symm ay ay_group with ⟨ax, ⟨ax_group, ay_eq_ax⟩⟩,
+      use [ax, ax_group],
+      rw ←coe_eq_coe at ay_eq_ax,
+      rw ←ay_eq_ax,
+      assumption }
+  end
+
+  lemma join_group'_eq {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α) : join (group' xs) = xs :=
+  begin
+    simp only [group', coe_join, coe_eq_coe],
+    exact list.join_group_perm xs
+  end
+
+  lemma group'_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs : list α} : 
+    ∀ g ∈ group' xs, ∀ x y ∈ g, x ≈ y :=
+  begin
+    simp only [group', and_imp, list.mem_map, mem_coe, exists_imp_distrib],
+    intros g x h heq,
+    rw ←heq,
+    simp only [mem_coe],
+    exact list.group_equiv x h
+  end
+
+  lemma pairwise_equiv_disjoint_group' {α : Type*} [decidable_eq α] [p : setoid α] [decidable_rel p.r] (xs : list α) :
+    pairwise (λ g1 g2 : multiset α, ∀ x1 ∈ g1, ∀ x2 ∈ g2, ¬(x1 ≈ x2)) (group' xs) :=
+  begin
+    simp only [group'],
+    rw pairwise_coe_iff_pairwise,
+    have h, from list.pairwise_equiv_disjoint_group xs,
+    { rw list.pairwise_map,
+      simpa only [mem_coe] },
+    unfold symmetric,
+    intros x y h x1 x1_in_y x2 x2_in_x h',
+    exact absurd (setoid.symm h') (h x2 x2_in_x x1 x1_in_y)
+  end
+
+  lemma filter_equiv_mem_group' {α : Type*} [p : setoid α] [decidable_rel p.r] {x : α} {xs : list α} (h : x ∈ xs) : 
+    filter (≈ x) xs ∈ group' xs :=
+  begin
+    simp only [group', coe_filter, coe_eq_coe, list.mem_map, mem_coe],
+    have h, from list.filter_equiv_mem_group h,
+    use list.filter (λ (_x : α), _x ≈ x) xs,
+    split,
+    { assumption },
+    refl
+  end
+
+  lemma subset_of_eq {α : Type*} {xs ys : multiset α} (h : xs = ys) : xs ⊆ ys ∧ ys ⊆ xs :=
+  begin
+    rw h,
+    exact ⟨subset.refl ys, subset.refl ys⟩
+  end 
+
+  lemma cons_eq_filter_of_group' {α : Type*} [p : setoid α] [decidable_rel p.r] {g_hd : α} {g_tl : multiset α} {xs : list α}
+    (h : g_hd :: g_tl ∈ group' xs) : 
+    g_hd :: g_tl = filter (≈ g_hd) xs :=
+  begin
+    letI := classical.dec_eq α,
+    simp only [group', list.mem_map, mem_coe, list.map] at h,
+    simp only [coe_filter],
+    rcases h with ⟨a, a_group, a_eq_g⟩,
+    cases a,
+    { simp only [coe_nil_eq_zero, zero_ne_cons] at a_eq_g,
+      contradiction },
+    have g : (a_hd :: a_tl : list α) = list.filter (λ (_x : α), _x ≈ a_hd) xs, from list.cons_eq_filter_of_group a_group,
+    rw ←a_eq_g,
+    rw g,
+    simp only [coe_eq_coe],
+    have g_hd_mem_a, from (subset_of_eq a_eq_g).right (mem_cons_self g_hd g_tl),
+    simp only [mem_coe] at g_hd_mem_a,
+    have g_hd_equiv_a_hd, from list.group_equiv (a_hd :: a_tl) a_group a_hd g_hd (list.mem_cons_self a_hd a_tl) g_hd_mem_a,
+    have equiv : (∀ x ∈ xs, x ≈ a_hd ↔ x ≈ g_hd),
+    { intros x x_in_xs,
+      split;
+      intro h_eq,
+      { exact setoid.trans h_eq g_hd_equiv_a_hd },
+      { exact setoid.trans h_eq (setoid.symm g_hd_equiv_a_hd) } },
+    rw list.filter_congr equiv
+  end
+
+  def group {α : Type*} [p : setoid α] [decidable_rel p.r] (s : multiset α) : multiset (multiset α) :=
+  quot.lift_on s group' (@group'_eq_of_perm _ _ _)
+
+  lemma join_group_eq {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : multiset α) : join (group xs) = xs :=
+  quot.induction_on xs join_group'_eq
+
+  lemma group_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs : multiset α} : 
+    ∀ g ∈ group xs, ∀ x y ∈ g, x ≈ y :=
+  quot.induction_on xs (@group'_equiv _ _ _)
+
+  lemma pairwise_equiv_disjoint_group {α : Type*} [decidable_eq α] [p : setoid α] [decidable_rel p.r] (xs : multiset α) :
+    pairwise (λ g1 g2 : multiset α, ∀ x1 ∈ g1, ∀ x2 ∈ g2, ¬(x1 ≈ x2)) (group xs) :=
+  quot.induction_on xs pairwise_equiv_disjoint_group'
+
+  lemma filter_equiv_mem_group {α : Type*} [p : setoid α] [decidable_rel p.r] {x : α} {xs : multiset α} : 
+    x ∈ xs → filter (≈ x) xs ∈ group xs :=
+  quot.induction_on xs (λ l, filter_equiv_mem_group')
+
+  lemma cons_eq_filter_of_group {α : Type*} [p : setoid α] [decidable_rel p.r] {g_hd : α} {g_tl : multiset α} {xs : multiset α} :
+    g_hd :: g_tl ∈ group xs → g_hd :: g_tl = filter (≈ g_hd) xs :=
+  quot.induction_on xs (λ l, cons_eq_filter_of_group')
+end multiset
 
 namespace finset
   def join {α : Type*} [decidable_eq α] (xs : list (finset α)) : finset α := xs.foldr (∪) ∅ 
