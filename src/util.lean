@@ -399,6 +399,32 @@ namespace list
     rw filter_congr eqv
   end
 
+  lemma group_eq_of_mem_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs g1 g2 : list α}
+    (h1 : g1 ∈ group xs) (h2 : g2 ∈ group xs) (h : ∃ x ∈ g1, ∃ y ∈ g2, x ≈ y) :
+    g1 = g2 :=
+  begin
+    cases g1,
+    { exact absurd h1 (nil_not_mem_group xs) },
+    cases g2,
+    { exact absurd h2 (nil_not_mem_group xs) },
+    rw cons_eq_filter_of_group h1 at *,
+    rw cons_eq_filter_of_group h2 at *,
+    rcases h with ⟨x, x_in_g1, y, y_in_g2, h⟩,
+    simp only [mem_filter] at *,
+    apply filter_congr,
+    intros z z_in_xs,
+    split;
+    intro h_eq,
+    { calc z ≈ g1_hd : h_eq
+         ... ≈ x : setoid.symm x_in_g1.right
+         ... ≈ y : h
+         ... ≈ g2_hd : y_in_g2.right },
+    { calc z ≈ g2_hd : h_eq
+         ... ≈ y : setoid.symm y_in_g2.right
+         ... ≈ x : setoid.symm h
+         ... ≈ g1_hd : x_in_g1.right }
+  end
+
   lemma group_perm_of_perm {α : Type*} [p : setoid α] [decidable_rel p.r] {xs ys : list α} (h : xs ~ ys) :
     ∀ gx ∈ group xs, ∃ gy ∈ group ys, gx ~ gy :=
   begin
@@ -476,6 +502,17 @@ namespace multiset
     exact list.join_group_perm xs
   end
 
+  lemma nil_not_mem_group' {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : list α)
+    : ∅ ∉ group' xs :=
+  begin
+    simp [group'],
+    intros x x_in_group h,
+    rw coe_eq_zero at h,
+    rw h at x_in_group,
+    have g, from list.nil_not_mem_group xs,
+    contradiction
+  end
+
   lemma group'_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs : list α} : 
     ∀ g ∈ group' xs, ∀ x y ∈ g, x ≈ y :=
   begin
@@ -543,11 +580,29 @@ namespace multiset
     rw list.filter_congr equiv
   end
 
+  lemma group'_eq_of_mem_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs : list α} {g1 g2 : multiset α}
+    (h1 : g1 ∈ group' xs) (h2 : g2 ∈ group' xs) (h : ∃ x ∈ g1, ∃ y ∈ g2, x ≈ y) :
+    g1 = g2 :=
+  begin
+    simp only [group', list.mem_map, mem_coe] at h1 h2,
+    rcases h1 with ⟨g1a, g1a_group, g1a_def⟩,
+    rcases h2 with ⟨g2a, g2a_group, g2a_def⟩,
+    rw ←g1a_def at *,
+    rw ←g2a_def at *,
+    simp only [coe_eq_coe],
+    simp only [exists_prop, mem_coe] at h,
+    rcases h with ⟨x, x_in_g1a, y, y_in_g2a, h⟩,
+    rw list.group_eq_of_mem_equiv g1a_group g2a_group ⟨x, x_in_g1a, y, y_in_g2a, h⟩
+  end
+
   def group {α : Type*} [p : setoid α] [decidable_rel p.r] (s : multiset α) : multiset (multiset α) :=
   quot.lift_on s group' (@group'_eq_of_perm _ _ _)
 
   lemma join_group_eq {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : multiset α) : join (group xs) = xs :=
   quot.induction_on xs join_group'_eq
+
+  lemma nil_not_mem_group {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : multiset α) : ∅ ∉ group xs :=
+  quot.induction_on xs nil_not_mem_group'
 
   lemma group_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs : multiset α} : 
     ∀ g ∈ group xs, ∀ x y ∈ g, x ≈ y :=
@@ -564,6 +619,10 @@ namespace multiset
   lemma cons_eq_filter_of_group {α : Type*} [p : setoid α] [decidable_rel p.r] {g_hd : α} {g_tl : multiset α} {xs : multiset α} :
     g_hd :: g_tl ∈ group xs → g_hd :: g_tl = filter (≈ g_hd) xs :=
   quot.induction_on xs (λ l, cons_eq_filter_of_group')
+
+  lemma group_eq_of_mem_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs g1 g2 : multiset α} :
+    g1 ∈ group xs → g2 ∈ group xs → (∃ x ∈ g1, ∃ y ∈ g2, x ≈ y) → g1 = g2 :=
+  quot.induction_on xs (λ l, @group'_eq_of_mem_equiv _ _ _ l _ _)
 end multiset
 
 namespace finset
