@@ -273,7 +273,7 @@ section FV_C
   end
 end FV_C
 
-open multiset
+open multiset (hiding coe_sort)
 
 lemma subdivide_type_context (Γ : type_context) : 
   ∃ y𝕆 y𝔹 yℝ : type_context, Γ = y𝕆 + y𝔹 + yℝ 
@@ -308,13 +308,15 @@ begin
       { cases h;
         { cases h,
           rw h_right at h_left,
-          simp only [ob_lin_type_coe] at h_left,
+          unfold_coes at h_left,
+          simp only [] at h_left,
           assumption } },
       contradiction },
     simp only [filter_congr h_f', coe_nil_eq_zero, add_zero, filter_false],
     have h_f'' : ∀ a ∈ Γ, ((a : typed_var).ty = ↑𝕆 ∨ a.ty = ↑𝔹) ∨ a.ty = ℝ ↔ true,
     { intros a a_in_Γ,
-      simp only [iff_true, ob_lin_type_coe],
+      unfold_coes,
+      simp only [iff_true],
       cases a.ty,
       { cases a_1;
         simp only [false_or, or_false] },
@@ -325,7 +327,8 @@ begin
     rw disjoint_filter_filter,
     intros x x_in_Γ x_ty,
     rw x_ty,
-    simp only [not_false_iff, rc_correctness.ob_lin_type_coe] 
+    unfold_coes,
+    simp only [not_false_iff] 
   }
 end
 

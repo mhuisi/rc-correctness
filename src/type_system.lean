@@ -21,8 +21,6 @@ begin
   rw h
 end
 
-@[simp] lemma ob_lin_type_coe (t : ob_lin_type) : (↑t : lin_type) = lin_type.ob t := rfl
-
 structure typed_rc := (c : rc) (ty : lin_type)
 
 @[derive decidable_eq]
