@@ -631,6 +631,18 @@ namespace multiset
   @[simp] lemma filter_false {α : Type*} {h : decidable_pred (λ a : α, false)} (s : multiset α) : 
     @filter α (λ _, false) h s = [] :=
   quot.induction_on s (λ l, congr_arg coe (list.filter_false l))
+
+  lemma disjoint_filter_filter {α : Type*} {p1 p2 : α → Prop} [decidable_pred p1] [decidable_pred p2] {s : multiset α} :
+    disjoint (s.filter p1) (s.filter p2) ↔ ∀ x ∈ s, p1 x → ¬p2 x :=
+  begin
+    simp only [disjoint, and_imp, mem_filter],
+    split;
+    intro h,
+    { intros x x_in_s p1_x,
+      exact h x_in_s p1_x x_in_s },
+    intros x x_in_s p1_x x_in_s,
+    exact h x x_in_s p1_x
+  end
 end multiset
 
 namespace finset
