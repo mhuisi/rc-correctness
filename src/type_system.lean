@@ -13,6 +13,16 @@ inductive lin_type : Type
 
 instance ob_lin_type_to_lin_type : has_coe ob_lin_type lin_type := ⟨lin_type.ob⟩
 
+@[simp] lemma coe_eq_coe (t1 t2 : ob_lin_type) : (↑t1 : lin_type) = ↑t2 ↔ t1 = t2 :=
+begin
+  split;
+  intro h,
+  { exact lin_type.ob.inj h },
+  rw h
+end
+
+@[simp] lemma ob_lin_type_coe (t : ob_lin_type) : (↑t : lin_type) = lin_type.ob t := rfl
+
 structure typed_rc := (c : rc) (ty : lin_type)
 
 @[derive decidable_eq]

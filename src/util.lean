@@ -623,6 +623,14 @@ namespace multiset
   lemma group_eq_of_mem_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs g1 g2 : multiset α} :
     g1 ∈ group xs → g2 ∈ group xs → (∃ x ∈ g1, ∃ y ∈ g2, x ≈ y) → g1 = g2 :=
   quot.induction_on xs (λ l, @group'_eq_of_mem_equiv _ _ _ l _ _)
+
+  @[simp] lemma filter_true {α : Type*} {h : decidable_pred (λ a : α, true)} (s : multiset α) : 
+    @filter α (λ _, true) h s = s :=
+  quot.induction_on s (λ l, congr_arg coe (list.filter_true l))
+
+  @[simp] lemma filter_false {α : Type*} {h : decidable_pred (λ a : α, false)} (s : multiset α) : 
+    @filter α (λ _, false) h s = [] :=
+  quot.induction_on s (λ l, congr_arg coe (list.filter_false l))
 end multiset
 
 namespace finset
