@@ -275,8 +275,6 @@ end FV_C
 
 open multiset
 
-set_option pp.all
-
 lemma subdivide_type_context (Γ : type_context) : 
   ∃ y𝕆 y𝔹 yℝ : type_context, Γ = y𝕆 + y𝔹 + yℝ 
     ∧ (∀ t ∈ y𝕆, (t : typed_var).ty = 𝕆)
@@ -302,9 +300,9 @@ begin
       contradiction },
     simp only [filter_congr h_f, coe_nil_eq_zero, add_zero, filter_false],
     rw filter_add_filter,
-    simp only [or_and_distrib_right],
-    have h_f' : ∀ a ∈ Γ, (a : typed_var).ty = ↑𝕆 ∧ a.ty = ℝ ∨ a.ty = ↑𝔹 ∧ a.ty = ℝ ↔ false,
-    { intros a a_in_Γ,
+    have h_f' : ∀ a ∈ Γ, ((a : typed_var).ty = ↑𝕆 ∨ a.ty = ↑𝔹) ∧ a.ty = ℝ ↔ false,
+    { simp only [or_and_distrib_right],
+      intros a a_in_Γ,
       split;
       intro h,
       { cases h;
@@ -313,7 +311,22 @@ begin
           simp only [ob_lin_type_coe] at h_left,
           assumption } },
       contradiction },
-    rw filter_congr h_f', }
+    simp only [filter_congr h_f', coe_nil_eq_zero, add_zero, filter_false],
+    have h_f'' : ∀ a ∈ Γ, ((a : typed_var).ty = ↑𝕆 ∨ a.ty = ↑𝔹) ∨ a.ty = ℝ ↔ true,
+    { intros a a_in_Γ,
+      simp only [iff_true, ob_lin_type_coe],
+      cases a.ty,
+      { cases a_1;
+        simp only [false_or, or_false] },
+      simp only [false_or, or_self] },
+    simp only [filter_congr h_f'', multiset.filter_true] },
+  all_goals { try { intros t h, exact (mem_filter.mp h).right } },
+  all_goals { 
+    rw disjoint_filter_filter,
+    intros x x_in_Γ x_ty,
+    rw x_ty,
+    simp only [not_false_iff, rc_correctness.ob_lin_type_coe] 
+  }
 end
 
 theorem rc_insertion_correctness (β : const → var → ob_lin_type) (δ : const → fn) (wf : β ⊢ δ) : β ⊩ C_prog β δ :=
