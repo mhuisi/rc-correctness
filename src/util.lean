@@ -210,21 +210,23 @@ namespace list
     exact ih _ (length_filter_lt_length_cons _ xs_hd xs_tl) g1_group g2_group
   end
 
-  lemma group_equiv_disjoint {α : Type*} [p : setoid α] [d : decidable_rel p.r] (xs : list α) : 
-    ∀ g1 g2 ∈ group xs, g1 ≠ g2 → ∀ x1 ∈ g1, ∀ x2 ∈ g2, ¬(x1 ≈ x2) :=
-  begin
-    intros g1 g2 g1_group g2_group,
-    contrapose,
-    classical,
-    simp only [and_imp, not_imp, not_not, exists_imp_distrib, not_forall],
-    intros x1 x1_in_g1 x2 x2_in_g2 h,
-    suffices g : ∀ x1 ∈ g1, ∀ x2 ∈ g2, x1 ≈ x2,
-    { exact @group_equiv_disjoint' α p d xs g1 g2 g1_group g2_group g },
-    intros y1 y1_in_g1 y2 y2_in_g2,
-    calc y1 ≈ x1 : @group_equiv α p d xs g1 g1_group y1 x1 y1_in_g1 x1_in_g1
-        ... ≈ x2 : h
-        ... ≈ y2 : @group_equiv α p d xs g2 g2_group x2 y2 x2_in_g2 y2_in_g2
-  end
+  section group_equiv_disjoint 
+    local attribute [instance] classical.prop_decidable
+    lemma group_equiv_disjoint {α : Type*} [p : setoid α] [d : decidable_rel p.r] (xs : list α) : 
+      ∀ g1 g2 ∈ group xs, g1 ≠ g2 → ∀ x1 ∈ g1, ∀ x2 ∈ g2, ¬(x1 ≈ x2) :=
+    begin
+      intros g1 g2 g1_group g2_group,
+      contrapose,
+      simp only [and_imp, not_imp, not_not, exists_imp_distrib, not_forall],
+      intros x1 x1_in_g1 x2 x2_in_g2 h,
+      suffices g : ∀ x1 ∈ g1, ∀ x2 ∈ g2, x1 ≈ x2,
+      { exact group_equiv_disjoint' xs g1 g2 g1_group g2_group g },
+      intros y1 y1_in_g1 y2 y2_in_g2,
+      calc y1 ≈ x1 : group_equiv g1 g1_group y1 x1 y1_in_g1 x1_in_g1
+          ... ≈ x2 : h
+          ... ≈ y2 : group_equiv g2 g2_group x2 y2 x2_in_g2 y2_in_g2
+    end
+  end group_equiv_disjoint
 
   lemma nodup_perm_group {α : Type*} [decidable_eq α] [p : setoid α] [decidable_rel p.r] (xs : list α) : 
     pairwise (λ a b, ¬(a ~ b)) (group xs) :=
@@ -443,6 +445,24 @@ namespace list
     apply perm_filter,
     assumption
   end
+
+  section map_on_of_nodup
+    local attribute [instance] classical.prop_decidable
+    lemma map_on_of_nodup {α β : Type*} {f : α → β} {s : list α} (nd : nodup (map f s)) 
+      {x : α} (x_in_s : x ∈ s) {y : α} (y_in_s : y ∈ s) (f_eq : f x = f y) : x = y := 
+    begin
+      unfold nodup at nd,
+      rw pairwise_map at nd, 
+      have s : symmetric (λ (a b : α), f a ≠ f b),
+      { unfold symmetric,
+        intros x y,
+        exact ne.symm },
+      have h, from forall_of_pairwise s nd x x_in_s y y_in_s,
+      by_contradiction,
+      exact absurd f_eq (h a)
+    end
+  end map_on_of_nodup
+
 end list
 
 namespace multiset
@@ -643,6 +663,10 @@ namespace multiset
     intros x x_in_s p1_x x_in_s,
     exact h x x_in_s p1_x
   end
+
+  lemma map_on_of_nodup {α β : Type*} {f : α → β} {s : multiset α} : 
+    nodup (map f s) → ∀ x ∈ s, ∀ y ∈ s, f x = f y → x = y := 
+  quot.induction_on s (λ l, @list.map_on_of_nodup α β f l)
 end multiset
 
 namespace finset
