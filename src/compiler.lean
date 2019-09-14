@@ -15,6 +15,9 @@ if βₗ x = 𝕆 ∧ x ∉ FV F then dec x; F else F
 def dec_𝕆 (xs : list var) (F : fn_body) (βₗ : var → ob_lin_type) : fn_body := 
 xs.foldr (λ x acc, dec_𝕆_var x acc βₗ) F
 
+def dec_𝕆' (xs : list var) (F : fn_body) (βₗ : var → ob_lin_type) : fn_body := 
+xs.foldr (λ x acc, if βₗ x = 𝕆 ∧ x ∉ FV F then dec x; acc else acc) F
+
 def C_app : list (var × ob_lin_type) → fn_body → (var → ob_lin_type) → fn_body
 | [] (z ≔ e; F) βₗ := z ≔ e; F
 | ((y, t)::xs) (z ≔ e; F) βₗ := 

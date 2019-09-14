@@ -308,6 +308,28 @@ begin
   { exact or.inl ⟨y_in_ys, y𝕆, h⟩ }
 end
 
+lemma dec_𝕆_eq_dec_𝕆'_of_nodup {ys : list var} (F : fn_body) (βₗ : var → ob_lin_type)
+  (d : list.nodup ys) : dec_𝕆 ys F βₗ = dec_𝕆' ys F βₗ :=
+begin
+  unfold dec_𝕆 dec_𝕆_var dec_𝕆',
+  induction ys,
+  { simp only [list.foldr_nil] },
+  cases list.nodup_cons.mp d with ys_hd_not_in_ys_tl nodup_ys_tl,
+  simp only [list.foldr_cons],
+  split_ifs,
+  { exact ⟨rfl, ys_ih nodup_ys_tl⟩ },
+  { simp only [not_and, not_not] at h_1,
+    have g1, from h.right,
+    have g2, from finset.subset_iff.mp (FV_sub_FV_dec_𝕆 ys_tl F βₗ) (h_1 h.left),
+    contradiction },
+  { simp only [not_and, not_not] at h,
+    have g1, from h_1.right,
+    have g2, from finset.subset_iff.mp (FV_dec_𝕆_sub_vars_FV ys_tl F βₗ) (h h_1.left),
+    simp only [list.mem_to_finset, finset.mem_union] at g2,
+    cases g2; contradiction },
+  { exact ys_ih nodup_ys_tl }
+end
+
 open multiset (hiding coe_sort)
 
 axiom nodup_params (δ : const → fn) (c : const) : list.nodup (δ c).ys
@@ -325,17 +347,28 @@ begin
   exact nodup_params δ c
 end
 
-lemma foo {β : const → var → ob_lin_type} {Γ : type_context} {ys : list var} {F : fn_body} {βₗ : var → ob_lin_type}
-  (h : β; Γ ⊩ dec_𝕆 ys F βₗ ∷ 𝕆) : 
-  β; Γ + (filter (λ y : var, βₗ y = 𝕆) ↑ys {∶} 𝕆) ⊩ F ∷ 𝕆 :=
+lemma linear_dec_o_vars {β : const → var → ob_lin_type} {Γ : type_context} {ys : list var} {F : fn_body} {βₗ : var → ob_lin_type}
+  (h : β; Γ ⊩ F ∷ 𝕆) (d : nodup ys)
+  : β; Γ + (filter (λ y : var, βₗ y = 𝕆 ∧ y ∉ FV F) ↑ys {∶} 𝕆) ⊩ dec_𝕆 ys F βₗ ∷ 𝕆 :=
 begin
+  rw dec_𝕆_eq_dec_𝕆'_of_nodup F βₗ d,
   induction ys,
-  { simp only [coe_nil_eq_zero, add_zero, filter_zero, map_zero],
-    simp only [dec_𝕆, list.foldr_nil] at h,
+  { simp only [coe_nil_eq_zero, add_zero, filter_zero, map_zero, list.foldr_nil],
     assumption },
-  simp only [dec_𝕆, dec_𝕆_var, list.foldr_cons] at h,
-  split_ifs at h,
-  sorry, sorry
+  cases list.nodup_cons.mp d with ys_hd_not_in_ys_tl nodup_ys_tl,
+  replace ys_ih := ys_ih nodup_ys_tl,
+  simp only [dec_𝕆', list.foldr_cons, coe_filter, coe_map] at *,
+  split_ifs,
+  { rw @list.filter_cons_of_pos _ (λ (y : var), βₗ y = 𝕆 ∧ y ∉ FV F) _ _ ys_tl h_1,
+    simp only [list.map],
+    have : ∀ xs : list typed_var, (↑((ys_hd ∶ ↑𝕆) :: xs) : multiset typed_var) = (ys_hd ∶ ↑𝕆) :: ↑xs, from λ xs, rfl, 
+    simp only [this, add_cons],
+    apply linear.dec_o,
+    assumption },
+  { simp only [not_and, not_not] at h_1, 
+    by_cases ys_hd_ty : βₗ ys_hd = 𝕆,
+    { rwa @list.filter_cons_of_neg _ (λ (y : var), βₗ y = 𝕆 ∧ y ∉ FV F) _ _ ys_tl (λ h, absurd (h_1 ys_hd_ty) h.right) },
+    { rwa @list.filter_cons_of_neg _ (λ (y : var), βₗ y = 𝕆 ∧ y ∉ FV F) _ _ ys_tl (λ h, absurd h.left ys_hd_ty) } }
 end
 
 theorem rc_insertion_correctness (β : const → var → ob_lin_type) (δ : const → fn) (wf : β ⊢ δ) : β ⊩ C_prog β δ :=
