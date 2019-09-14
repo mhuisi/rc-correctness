@@ -667,6 +667,24 @@ namespace multiset
   lemma map_on_of_nodup {α β : Type*} {f : α → β} {s : multiset α} : 
     nodup (map f s) → ∀ x ∈ s, ∀ y ∈ s, f x = f y → x = y := 
   quot.induction_on s (λ l, @list.map_on_of_nodup α β f l)
+
+  lemma map_add_of_disjoint {α β : Type*} [decidable_eq α] (f1 f2 : α → β) {s1 s2 : multiset α} (h : disjoint s1 s2) : 
+    map f1 s1 + map f2 s2 = map (λ x, if x ∈ s1 then f1 x else f2 x) (s1 + s2) :=
+  begin
+    simp only [map_add],
+    have h1 : map f1 s1 = map (λ (x : α), ite (x ∈ s1) (f1 x) (f2 x)) s1,
+    { have h1' : ∀ x ∈ s1, f1 x = ite (x ∈ s1) (f1 x) (f2 x),
+      { intros x x_in_s1,
+        rw if_pos x_in_s1 },
+      rw map_congr h1' },
+    have h2 : map f2 s2 = map (λ (x : α), ite (x ∈ s1) (f1 x) (f2 x)) s2,
+    { have h2' : ∀ x ∈ s2, f2 x = ite (x ∈ s1) (f1 x) (f2 x),
+      { intros x x_in_s2,
+        rw if_neg,
+        exact h.symm x_in_s2 },
+      rw map_congr h2' },
+    rw h1, rw h2
+  end 
 end multiset
 
 namespace finset

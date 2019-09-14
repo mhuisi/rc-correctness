@@ -125,6 +125,30 @@ section FV_C
     { exact vars_ih }
   end
 
+  lemma FV_dec_𝕆_filter (ys : list var) (F : fn_body) (βₗ : var → ob_lin_type) 
+    : FV (dec_𝕆 ys F βₗ) = ys.to_finset.filter (λ y, βₗ y = 𝕆 ∧ y ∉ FV F) ∪ FV F :=
+  begin
+    induction ys,
+    { simp only [dec_𝕆, filter_empty, finset.empty_union, list.to_finset_nil, list.foldr_nil] },
+    simp only [dec_𝕆, dec_𝕆_var, filter_insert, list.foldr_cons, list.to_finset_cons] at *,
+    split_ifs;
+    try { simp only [FV, insert_union] }, 
+    { rw ys_ih },
+    { simp only [not_and, not_not] at h_1,
+      have ys_hd_in_FV, from h_1 h.left,
+      have : 
+        FV (list.foldr (λ (x : var) (acc : fn_body), 
+          ite (βₗ x = 𝕆 ∧ x ∉ FV acc) (dec x; acc) acc) 
+          F ys_tl) = FV (dec_𝕆 ys_tl F βₗ), from rfl,
+      rw this at h,
+      exact absurd (subset_iff.mp (FV_sub_FV_dec_𝕆 ys_tl F βₗ) ys_hd_in_FV) h.right },
+    { simp only [not_and, not_not] at h,
+      have ys_hd_in_FV, from h h_1.left,
+      rw ys_ih at *,
+      rw insert_eq_of_mem ys_hd_in_FV },
+    { rw ys_ih }
+  end
+
   lemma FV_dec_eq_FV {e : expr} {x z : var} {F : fn_body} 
     (h : x ∈ FV_expr e ∪ erase (FV F) z) : 
     FV_expr e ∪ erase (FV (dec x; F)) z = FV_expr e ∪ erase (FV F) z :=
@@ -273,78 +297,46 @@ section FV_C
   end
 end FV_C
 
-open multiset (hiding coe_sort)
-
-lemma subdivide_type_context {Γ : type_context} (nd : nodup (map (λ t, (t : typed_var).x) Γ)) : 
-  ∃ y𝕆 y𝔹 yℝ : multiset var, Γ = map (∶ 𝕆) y𝕆 + map (∶ 𝔹) y𝔹 + map (∶ ℝ) yℝ 
-    ∧ multiset.disjoint y𝕆 y𝔹 ∧ multiset.disjoint y𝕆 yℝ ∧ multiset.disjoint y𝔹 yℝ :=
+lemma vars_sub_FV_dec_𝕆 (ys : list var) (F : fn_body) (βₗ : var → ob_lin_type) 
+  : ∀ y ∈ ys, βₗ y = 𝕆 → y ∈ FV (dec_𝕆 ys F βₗ) :=
 begin
-  set y𝕆 := map (λ t, (t : typed_var).x) (filter (λ t, (t : typed_var).ty = 𝕆) Γ) with y𝕆_def,
-  set y𝔹 := map (λ t, (t : typed_var).x) (filter (λ t, (t : typed_var).ty = 𝔹) Γ) with y𝔹_def,
-  set yℝ := map (λ t, (t : typed_var).x) (filter (λ t, (t : typed_var).ty = ℝ) Γ) with yℝ_def,
-  use [y𝕆, y𝔹, yℝ],
-  rw y𝕆_def, rw y𝔹_def, rw yℝ_def,
-  repeat { split },
-  { simp only [add_comm, function.comp_app, multiset.map_map],
-    have g : ∀ τ : lin_type, ∀ t ∈ filter (λ (t : typed_var), t.ty = τ) Γ, (t.x ∶ τ) = t,
-    { intros τ t t_in_filter,
-      rw mem_filter at t_in_filter,
-      cases t_in_filter with t_in_Γ ty_τ,
-      cases t,
-      simp only [true_and] at *,
-      rw ty_τ,
-      exact ⟨rfl, rfl⟩ },
-    simp only [map_congr (g 𝕆), map_congr (g 𝔹), map_congr (g ℝ), map_id', map_id],
-    rw filter_add_filter,
-    have h_f : ∀ a ∈ Γ, (a : typed_var).ty = ↑𝔹 ∧ a.ty = ↑𝕆 ↔ false,
-    { intros a a_in_Γ,
-      split;
-      intro h,
-      { cases h,
-        rw h_left at h_right,
-        simp only [coe_eq_coe] at h_right,
-        assumption },
-      contradiction },
-    simp only [filter_congr h_f, coe_nil_eq_zero, add_zero, filter_false],
-    rw filter_add_filter,
-    have h_f' : ∀ a ∈ Γ, (a : typed_var).ty = ℝ ∧ (a.ty = ↑𝔹 ∨ a.ty = ↑𝕆) ↔ false,
-    { simp only [and_or_distrib_left],
-      intros a a_in_Γ,
-      split;
-      intro h,
-      { cases h;
-        { cases h,
-          rw h_right at h_left,
-          unfold_coes at h_left,
-          simp only [] at h_left,
-          assumption } },
-      contradiction },
-    simp only [filter_congr h_f', coe_nil_eq_zero, add_zero, filter_false],
-    have h_f'' : ∀ a ∈ Γ, (a : typed_var).ty = ℝ ∨ a.ty = ↑𝔹 ∨ a.ty = ↑𝕆 ↔ true,
-    { intros a a_in_Γ,
-      unfold_coes,
-      simp only [iff_true],
-      cases a.ty,
-      { cases a_1;
-        simp only [false_or, or_false] },
-      simp only [or_false, or_self] },
-    simp only [filter_congr h_f'', multiset.filter_true] },
-  all_goals { 
-    rw disjoint_map_map,
-    intros x x_in_filter y y_in_filter h, 
-    simp only [mem_filter] at x_in_filter y_in_filter,
-    cases x_in_filter with x_in_Γ x_𝕆,
-    cases y_in_filter with y_in_Γ y_𝔹,
-    have h' : x = y, from map_on_of_nodup nd x x_in_Γ y y_in_Γ h, -- no type annotation -> rw fails in next line
-    rw h' at x_𝕆,
-    rw x_𝕆 at y_𝔹,
-    unfold_coes at y_𝔹,
-    simp only [] at y_𝔹,
-    contradiction
-  }
+  intros y y_in_ys y𝕆,
+  rw FV_dec_𝕆_filter,
+  simp only [list.mem_to_finset, finset.mem_union, finset.mem_filter],
+  by_cases y ∈ FV F,
+  { exact or.inr h },
+  { exact or.inl ⟨y_in_ys, y𝕆, h⟩ }
 end
 
+open multiset (hiding coe_sort)
+
 axiom nodup_params (δ : const → fn) (c : const) : list.nodup (δ c).ys
+
+lemma nodup_type_context_params (β : const → var → ob_lin_type) (δ : const → fn) (c : const) 
+  : nodup (map (λ t, (t : typed_var).x) ↑(list.map (λ (y : var), y ∶ ↑(β c y)) (δ c).ys)) :=
+begin
+  simp only [coe_nodup, coe_map, list.map_map], 
+  apply @nodup_map _ _ _ (δ c).ys,
+  { unfold function.injective,
+    intros a b h,
+    simp only [function.comp_app] at h,
+    assumption },
+  simp only [coe_nodup],
+  exact nodup_params δ c
+end
+
+lemma foo {β : const → var → ob_lin_type} {Γ : type_context} {ys : list var} {F : fn_body} {βₗ : var → ob_lin_type}
+  (h : β; Γ ⊩ dec_𝕆 ys F βₗ ∷ 𝕆) : 
+  β; Γ + (filter (λ y : var, βₗ y = 𝕆) ↑ys {∶} 𝕆) ⊩ F ∷ 𝕆 :=
+begin
+  induction ys,
+  { simp only [coe_nil_eq_zero, add_zero, filter_zero, map_zero],
+    simp only [dec_𝕆, list.foldr_nil] at h,
+    assumption },
+  simp only [dec_𝕆, dec_𝕆_var, list.foldr_cons] at h,
+  split_ifs at h,
+  sorry, sorry
+end
 
 theorem rc_insertion_correctness (β : const → var → ob_lin_type) (δ : const → fn) (wf : β ⊢ δ) : β ⊩ C_prog β δ :=
 begin
@@ -356,11 +348,72 @@ begin
   rename wf_const_wf_F_wf wf,
   split,
   simp only [C_prog],
-  set ys := (δ c).ys with ys_def,
-  set F := (δ c).F with F_def,
-  set F' := C β F (β c) with F'_def,
-  unfold list.to_finset at wf,
-  unfold to_finset at wf,
+  let ys := (δ c).ys,
+  let Γ := (↑(list.map (λ (y : var), y ∶ ↑(β c y)) ys) : multiset typed_var),
+  let y𝕆 := filter (λ y, β c y = 𝕆) ys,
+  let y𝔹 := filter (λ y, β c y = 𝔹) ys,
+  let yℝ := filter (λ y, ↑(β c y) = ℝ) ys,
+  obtain ⟨y𝕆_𝕆, y𝔹_𝔹, yℝ_ℝ⟩ 
+    : (∀ y ∈ y𝕆, ↑(β c y) = ↑𝕆) ∧ (∀ y ∈ y𝔹, ↑(β c y) = ↑𝔹) ∧ (∀ y ∈ yℝ, ↑(β c y) = ℝ),
+  { repeat { split }; { intros y h, rw (mem_filter.mp h).right } },
+  obtain ⟨y𝕆_sub_ys, y𝔹_sub_ys, yℝ_sub_ys⟩ 
+    : (y𝕆 ⊆ ys ∧ y𝔹 ⊆ ys ∧ yℝ ⊆ ys),
+  { repeat { split }; simp only [filter_subset] },
+  obtain ⟨ys_𝕆_sub_y𝕆, ys_𝔹_sub_y𝔹, ys_ℝ_sub_yℝ⟩
+    : (∀ y ∈ ys, ↑(β c y) = ↑𝕆 → y ∈ y𝕆) 
+    ∧ (∀ y ∈ ys, ↑(β c y) = ↑𝔹 → y ∈ y𝔹) 
+    ∧ (∀ y ∈ ys, ↑(β c y) = ℝ → y ∈ yℝ),
+  { repeat { split };
+    { intros y y_in_ys y_ty, 
+      simp only [mem_filter, mem_coe], try { rw ←coe_eq_coe }, exact ⟨y_in_ys, y_ty⟩ } },
+  obtain ⟨dj_y𝕆_y𝔹, dj_y𝕆_yℝ, dj_y𝔹_yℝ⟩ 
+    : multiset.disjoint y𝕆 y𝔹 ∧ multiset.disjoint y𝕆 yℝ ∧ multiset.disjoint y𝔹 yℝ,
+  { repeat { split };
+    { rw disjoint_filter_filter,
+      intros x x_in_ys x_ty,
+      rw x_ty,
+      try { unfold_coes },
+      simp only [not_false_iff] } },
+  have ys_subdiv : ↑ys = y𝕆 + y𝔹 + yℝ,
+  { rw filter_add_filter,
+    have : ∀ y ∈ ↑ys, β c y = 𝕆 ∧ β c y = 𝔹 ↔ false,
+    { simp only [not_and, iff_false],
+      intros y y_in_ys h,
+      rw h, 
+      simp only [not_false_iff] }, 
+    simp only [@filter_congr _ _ _ _ _ ↑ys this, coe_nil_eq_zero, add_zero, filter_false],
+    rw filter_add_filter,
+    have : ∀ y ∈ ↑ys, (β c y = 𝕆 ∨ β c y = 𝔹) ∧ ↑(β c y) = ℝ ↔ false,
+    { simp only [or_and_distrib_right, iff_false],
+      intros y y_in_ys h,
+      cases h;
+      { unfold_coes at h,
+        simp only [and_false] at h,
+        contradiction } },
+    simp only [@filter_congr _ _ _ _ _ ↑ys this, coe_nil_eq_zero, add_zero, filter_false],
+    have : ∀ y ∈ ↑ys, (β c y = 𝕆 ∨ β c y = 𝔹) ∨ ↑(β c y) = ℝ ↔ true,
+    { simp only [iff_true],
+      intros y y_in_ys,
+      unfold_coes,
+      cases β c y; 
+      simp only [true_or, false_or, or_false] },
+    simp only [@filter_congr _ _ _ _ _ ↑ys this, filter_true] },
+  have Γ_subdiv : ↑(list.map (λ (y : var), y ∶ ↑(β c y)) ys) = (y𝕆 {∶} 𝕆) + (y𝔹 {∶} 𝔹) + (yℝ {∶} ℝ),
+  { have : ↑(list.map (λ (y : var), y ∶ ↑(β c y)) ys) = map (λ (y : var), y ∶ ↑(β c y)) ↑ys, 
+      from rfl,
+    rw this,
+    rw ys_subdiv,
+    simp only [map_add],  
+    have : ∀ (τ : lin_type) (yτ : multiset var), (∀ y ∈ yτ, ↑(β c y) = τ) →
+      ∀ y ∈ yτ, (y ∶ ↑(β c y)) = (y ∶ τ), 
+    { intros τ yτ h y y_in_yτ, 
+      rw h y y_in_yτ },
+    simp only [map_congr (this 𝕆 y𝕆 y𝕆_𝕆), map_congr (this 𝔹 y𝔹 y𝔹_𝔹), map_congr (this ℝ yℝ yℝ_ℝ)] },
+  have y𝕆_sub_FV : y𝕆.to_finset ⊆ FV (dec_𝕆 ((δ c).ys) (C β ((δ c).F) (β c)) (β c)), 
+  { rw finset.subset_iff,
+    intros y y_in_y𝕆,
+    simp only [mem_filter, mem_coe, mem_to_finset] at y_in_y𝕆,
+    exact vars_sub_FV_dec_𝕆 ys (C β ((δ c).F) (β c)) (β c) y y_in_y𝕆.left y_in_y𝕆.right },
   sorry
 end
 
