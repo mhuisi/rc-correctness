@@ -86,30 +86,6 @@ section FV_C
     exact insert_eq_of_mem h
   end
 
-  lemma FV_dec_𝕆_sub_vars_FV (vars : list var) (F : fn_body) (βₗ : var → ob_lin_type) 
-    : FV (dec_𝕆 vars F βₗ) ⊆ vars.to_finset ∪ FV F :=
-  begin
-    apply subset_iff.mpr,
-    intros x h,
-    unfold dec_𝕆 dec_𝕆_var at h,
-    induction vars,
-    { rw list.foldr_nil _ F at h, 
-      simpa only [list.to_finset_nil, empty_union] },
-    { simp only [mem_union, mem_insert, insert_union, list.mem_to_finset, list.to_finset_cons],
-      rw list.foldr_cons _ F _ at h, 
-      split_ifs at h,
-      { cases h_1 with vars_hd_𝕆 h_2,
-        simp only [FV, mem_insert] at h,
-        cases h, 
-        { exact or.inl h },
-        have x_tl_or_FV_F, from vars_ih h,
-        simp only [mem_union, list.mem_to_finset] at x_tl_or_FV_F, 
-        exact or.inr x_tl_or_FV_F },
-      { have x_tl_or_FV_F, from vars_ih h,
-        simp only [mem_union, list.mem_to_finset] at x_tl_or_FV_F, 
-        exact or.inr x_tl_or_FV_F } }
-  end
-
   lemma FV_sub_FV_dec_𝕆 (vars : list var) (F : fn_body) (βₗ : var → ob_lin_type) 
     : FV F ⊆ FV (dec_𝕆 vars F βₗ) :=
   begin
@@ -148,6 +124,17 @@ section FV_C
       rw insert_eq_of_mem ys_hd_in_FV },
     { rw ys_ih }
   end
+
+  lemma FV_dec_𝕆_sub_vars_FV (vars : list var) (F : fn_body) (βₗ : var → ob_lin_type) 
+  : FV (dec_𝕆 vars F βₗ) ⊆ vars.to_finset ∪ FV F :=
+  begin
+    simp only [FV_dec_𝕆_filter, subset_iff, mem_union, mem_filter, list.mem_to_finset], 
+    intros x h,
+    cases h,
+    { exact or.inl h.left },
+    { exact or.inr h }
+  end
+                           
 
   lemma FV_dec_eq_FV {e : expr} {x z : var} {F : fn_body} 
     (h : x ∈ FV_expr e ∪ erase (FV F) z) : 
@@ -349,8 +336,9 @@ end
 
 lemma linear_dec_o_vars {β : const → var → ob_lin_type} {Γ : type_context} {ys : list var} {F : fn_body} {βₗ : var → ob_lin_type}
   (h : β; Γ ⊩ F ∷ 𝕆) (d : nodup ys)
-  : β; Γ + (filter (λ y : var, βₗ y = 𝕆 ∧ y ∉ FV F) ↑ys {∶} 𝕆) ⊩ dec_𝕆 ys F βₗ ∷ 𝕆 :=
+  : β; (filter (λ y : var, βₗ y = 𝕆 ∧ y ∉ FV F) ↑ys {∶} 𝕆) + Γ ⊩ dec_𝕆 ys F βₗ ∷ 𝕆 :=
 begin
+  rw add_comm,
   rw dec_𝕆_eq_dec_𝕆'_of_nodup F βₗ d,
   induction ys,
   { simp only [coe_nil_eq_zero, add_zero, filter_zero, map_zero, list.foldr_nil],
@@ -447,6 +435,26 @@ begin
     intros y y_in_y𝕆,
     simp only [mem_filter, mem_coe, mem_to_finset] at y_in_y𝕆,
     exact vars_sub_FV_dec_𝕆 ys (C β ((δ c).F) (β c)) (β c) y y_in_y𝕆.left y_in_y𝕆.right },
+  rw Γ_subdiv,
+  unfold list.to_finset at wf,
+  rw ys_subdiv at wf,
+  have y𝕆_subdiv : y𝕆 = filter (λ y, y ∉ FV (C β ((δ c).F) (β c))) y𝕆
+                       + filter (λ y, y ∈ FV (C β ((δ c).F) (β c))) y𝕆,
+                       
+  { rw filter_add_filter, 
+    simp only [coe_nil_eq_zero, add_zero, filter_false, not_and_self],
+    have : ∀ a ∈ y𝕆, a ∉ FV (C β ((δ c).F) (β c)) ∨ a ∈ FV (C β ((δ c).F) (β c)) ↔ true,
+    { simp only [or.symm, dec_em, iff_self, forall_true_iff] },
+    simp only [filter_congr this, filter_true] },
+  rw y𝕆_subdiv,
+  rw map_add,
+  rw filter_filter,
+  have : ∀ a ∈ ↑ys, a ∉ FV (C β ((δ c).F) (β c)) ∧ β c a = 𝕆 ↔ β c a = 𝕆 ∧ a ∉ FV (C β ((δ c).F) (β c)),
+  { intros a a_in_ys, split; intro h; exact and.symm h },
+  rw @filter_congr _ _ _ _ _ ↑ys this,
+  simp only [add_assoc],
+  apply linear_dec_o_vars _ (nodup_params δ c), 
+  let y𝕆' := filter (λ (y : var), y ∈ FV (C β ((δ c).F) (β c))) y𝕆,
   sorry
 end
 
