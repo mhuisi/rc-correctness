@@ -334,6 +334,8 @@ begin
   exact nodup_params δ c
 end
 
+
+
 lemma linear_dec_o_vars {β : const → var → ob_lin_type} {Γ : type_context} {ys : list var} {F : fn_body} {βₗ : var → ob_lin_type}
   (h : β; Γ ⊩ F ∷ 𝕆) (d : nodup ys)
   : β; (filter (λ y : var, βₗ y = 𝕆 ∧ y ∉ FV F) ↑ys {∶} 𝕆) + Γ ⊩ dec_𝕆 ys F βₗ ∷ 𝕆 :=
@@ -439,8 +441,7 @@ begin
   unfold list.to_finset at wf,
   rw ys_subdiv at wf,
   have y𝕆_subdiv : y𝕆 = filter (λ y, y ∉ FV (C β ((δ c).F) (β c))) y𝕆
-                       + filter (λ y, y ∈ FV (C β ((δ c).F) (β c))) y𝕆,
-                       
+                       + filter (λ y, y ∈ FV (C β ((δ c).F) (β c))) y𝕆,            
   { rw filter_add_filter, 
     simp only [coe_nil_eq_zero, add_zero, filter_false, not_and_self],
     have : ∀ a ∈ y𝕆, a ∉ FV (C β ((δ c).F) (β c)) ∨ a ∈ FV (C β ((δ c).F) (β c)) ↔ true,
@@ -455,6 +456,20 @@ begin
   simp only [add_assoc],
   apply linear_dec_o_vars _ (nodup_params δ c), 
   let y𝕆' := filter (λ (y : var), y ∈ FV (C β ((δ c).F) (β c))) y𝕆,
+  have y𝕆'_sub_y𝕆 : y𝕆' ⊆ y𝕆, from filter_subset y𝕆,
+  have dj_y𝕆'_y𝔹, from disjoint_of_subset_left y𝕆'_sub_y𝕆 dj_y𝕆_y𝔹,
+  have dj_y𝕆'_yℝ, from disjoint_of_subset_left y𝕆'_sub_y𝕆 dj_y𝕆_yℝ,
+  have y𝕆'_sub_FV : y𝕆'.to_finset ⊆ FV (δ c).F,
+  { rw finset.subset_iff, rw finset.subset_iff at y𝕆_sub_FV, rw subset_iff at y𝕆'_sub_y𝕆,
+    simp only [mem_to_finset], simp only [mem_to_finset] at y𝕆_sub_FV,
+    rw FV_dec_𝕆_filter at y𝕆_sub_FV, 
+    intros x x_in_y𝕆',
+    have h, from y𝕆_sub_FV (y𝕆'_sub_y𝕆 x_in_y𝕆'),
+    simp only [mem_filter, mem_coe] at x_in_y𝕆',
+    simp only [list.mem_to_finset, finset.mem_union, finset.mem_filter] at h,
+    cases h,
+    { exact absurd x_in_y𝕆'.right h.right.right },
+    rwa C_no_new_vars at h },
   sorry
 end
 
