@@ -317,6 +317,41 @@ begin
   { exact ys_ih nodup_ys_tl }
 end
 
+section foo
+open finset
+lemma foo {β : const → var → ob_lin_type} {δ : const → fn} {a b Δ : finset var} {F : fn_body} (h : β; δ; a; Δ ⊢ F)
+  : β; δ; filter (λ y, y ∈ FV F) a; Δ ⊢ F :=
+begin
+  induction h,
+  { apply fn_body_wf.ret,
+    simpa [FV] },
+  { apply fn_body_wf.let_const_app_full;
+    try { assumption },
+    { simp [subset_iff, FV, FV_expr],
+      intros x x_in_ys, 
+      simp [subset_iff] at h_ys_def,
+      exact ⟨h_ys_def x_in_ys, or.inl x_in_ys⟩ },
+    { intro h,
+      simp [FV, FV_expr] at h, 
+      cases h,
+      contradiction },
+    { have : ∀ y ∈ h_Γ, y ∈ FV h_F ↔ y ∈ FV (h_z ≔ h_c⟦h_ys…⟧; h_F),
+      { intros y y_in_h_Γ,
+        split;
+        intro h,
+        { simp [FV, FV_expr],
+          by_cases eq : y = h_z,
+          { rw eq at y_in_h_Γ,
+            contradiction },
+          { exact or.inr ⟨eq, h⟩ } },
+        { simp [FV, FV_expr] at h,
+          cases h,
+          { sorry } } } }
+     }
+end
+
+end foo
+
 open multiset (hiding coe_sort)
 
 axiom nodup_params (δ : const → fn) (c : const) : list.nodup (δ c).ys
@@ -333,8 +368,6 @@ begin
   simp only [coe_nodup],
   exact nodup_params δ c
 end
-
-
 
 lemma linear_dec_o_vars {β : const → var → ob_lin_type} {Γ : type_context} {ys : list var} {F : fn_body} {βₗ : var → ob_lin_type}
   (h : β; Γ ⊩ F ∷ 𝕆) (d : nodup ys)
@@ -359,6 +392,30 @@ begin
     by_cases ys_hd_ty : βₗ ys_hd = 𝕆,
     { rwa @list.filter_cons_of_neg _ (λ (y : var), βₗ y = 𝕆 ∧ y ∉ FV F) _ _ ys_tl (λ h, absurd (h_1 ys_hd_ty) h.right) },
     { rwa @list.filter_cons_of_neg _ (λ (y : var), βₗ y = 𝕆 ∧ y ∉ FV F) _ _ ys_tl (λ h, absurd h.left ys_hd_ty) } }
+end
+
+theorem rc_insertion_correctness' (β : const → var → ob_lin_type) (δ : const → fn) (c : const) 
+  (y𝕆 y𝕆' y𝔹 yℝ : multiset var) (y𝕆'_sub_y𝕆 : y𝕆' ⊆ y𝕆)
+  (y𝕆_𝕆 : ∀ y ∈ y𝕆, β c y = 𝕆) (y𝕆'_𝕆 : ∀ y ∈ y𝕆', β c y = 𝕆)
+  (y𝔹_𝔹 : ∀ y ∈ y𝔹, β c y = 𝔹) (yℝ_ℝ : ∀ y ∈ yℝ, ↑(β c y) = ℝ)
+  (y𝕆'_sub_FV : y𝕆'.to_finset ⊆ FV (δ c).F) (wf : β; δ; to_finset (y𝕆 + y𝔹); ∅ ⊢ (δ c).F)
+  (dj_y𝕆'_y𝔹 : multiset.disjoint y𝕆' y𝔹) (dj_y𝕆'_yℝ : multiset.disjoint y𝕆' yℝ) (dj_y𝔹_yℝ : multiset.disjoint y𝔹 yℝ) 
+  : β; (y𝕆' {∶} 𝕆) + (y𝔹 {∶} 𝔹) ⊩ C β ((δ c).F) (β c) ∷ 𝕆 :=
+begin
+  simp only [to_finset_add] at wf, 
+  with_cases { induction idef : (δ c).F using rc_correctness.fn_body.rec_wf },
+  case ret : x {
+    rw idef at *,
+    unfold C,
+    unfold FV at y𝕆'_sub_FV,
+    cases wf,
+    simp only [mem_union, ndunion_eq_union, to_finset_val, nodup_erase_dup, and_self,
+      nodup_union, mem_erase_dup, finset.union_val, finset.mem_mk] at wf_x_def,
+    unfold inc_𝕆,
+    cases wf_x_def,
+    { have : β c x = 𝕆 ∧ x ∉ ∅, from ⟨y𝕆_𝕆 x wf_x_def, finset.not_mem_empty x⟩,
+      rw if_pos this, }
+  }
 end
 
 theorem rc_insertion_correctness (β : const → var → ob_lin_type) (δ : const → fn) (wf : β ⊢ δ) : β ⊩ C_prog β δ :=
@@ -470,6 +527,7 @@ begin
     cases h,
     { exact absurd x_in_y𝕆'.right h.right.right },
     rwa C_no_new_vars at h },
+  
   sorry
 end
 
