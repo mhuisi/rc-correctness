@@ -321,6 +321,39 @@ section foo
 
 open finset
 
+lemma wf_sandwich' {β : const → var → ob_lin_type} {δ : const → fn} {Γ Δ Δ' : finset var} {F : fn_body} 
+  (Δ_sub_Δ' : Δ ⊆ Δ') (h : β; δ; Γ; Δ ⊢ F)
+  : β; δ; Γ; Δ' ⊢ F :=
+begin
+  induction h generalizing Δ',
+  { apply fn_body_wf.ret,
+    assumption },
+  { apply fn_body_wf.let_const_app_full; 
+    try { assumption },
+    exact h_ih Δ_sub_Δ' },
+  { apply fn_body_wf.let_const_app_part; 
+    try { assumption },
+    exact h_ih Δ_sub_Δ' },
+  { apply fn_body_wf.let_var_app; 
+    try { assumption },
+    exact h_ih Δ_sub_Δ' },
+  { apply fn_body_wf.let_ctor; 
+    try { assumption },
+    exact h_ih Δ_sub_Δ' },
+  { apply fn_body_wf.let_proj; 
+    try { assumption },
+    exact h_ih Δ_sub_Δ' },
+  { apply fn_body_wf.let_reset; 
+    try { assumption },
+    have : insert h_z h_Δ ⊆ insert h_z Δ', from insert_subset_insert h_z Δ_sub_Δ',
+    exact h_ih this },
+  { apply fn_body_wf.let_reuse,
+    { assumption },
+    { assumption },
+    {  }
+     },
+end
+
 lemma wf_sandwich {β : const → var → ob_lin_type} {δ : const → fn} {Γ Γ' Γ'' Δ : finset var} {F : fn_body} 
   (Γ_sub_Γ' : Γ ⊆ Γ') (Γ'_sub_Γ'' : Γ' ⊆ Γ'') (hΓ : β; δ; Γ; Δ ⊢ F) (hΓ'' : β; δ; Γ''; Δ ⊢ F)
   : β; δ; Γ'; Δ ⊢ F :=
