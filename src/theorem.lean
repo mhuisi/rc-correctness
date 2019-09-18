@@ -318,35 +318,56 @@ begin
 end
 
 section foo
-open finset
-lemma foo {β : const → var → ob_lin_type} {δ : const → fn} {a b Δ : finset var} {F : fn_body} (h : β; δ; a; Δ ⊢ F)
-  : β; δ; filter (λ y, y ∈ FV F) a; Δ ⊢ F :=
+
+lemma wf_sandwich {β : const → var → ob_lin_type} {δ : const → fn} {Γ Γ' Γ'' Δ : finset var} {F : fn_body} 
+  (Γ_sub_Γ' : Γ ⊆ Γ') (Γ'_sub_Γ'' : Γ' ⊆ Γ'') (hΓ : β; δ; Γ; Δ ⊢ F) (hΓ'' : β; δ; Γ''; Δ ⊢ F)
+  : β; δ; Γ'; Δ ⊢ F :=
 begin
+  with_cases { induction F using rc_correctness.fn_body.rec_wf generalizing Γ Γ'' },
+  case ret : x {
+    apply fn_body_wf.ret,
+    cases hΓ,
+    exact finset.subset_iff.mp Γ_sub_Γ' hΓ_x_def
+  },
+  case «let» : x e F ih {
+    cases e,
+    { cases hΓ,
+      cases hΓ'',
+      apply fn_body_wf.let_const_app_full;
+      try { assumption },
+      { transitivity,
+        { exact hΓ_ys_def },
+        { assumption } },
+      { intro h,
+        have h', from finset.subset_iff.mp Γ'_sub_Γ'' h,
+        contradiction },
+      {  }
+       }
+    
+  }
+end
+
+open finset
+lemma foo {β : const → var → ob_lin_type} {δ : const → fn} {Γ Γ' Δ : finset var} {F : fn_body} 
+  (Γ'_low : FV F ⊆ Γ') (Γ'_high : Γ' ⊆ Γ) (h : β; δ; Γ; Δ ⊢ F)
+  : β; δ; Γ'; Δ ⊢ F :=
+begin
+  rw subset_iff at Γ'_low Γ'_high,
   induction h,
   { apply fn_body_wf.ret,
-    simpa [FV] },
+    apply Γ'_low,
+    simp only [FV, finset.insert_empty_eq_singleton, finset.mem_singleton] },
   { apply fn_body_wf.let_const_app_full;
     try { assumption },
-    { simp [subset_iff, FV, FV_expr],
-      intros x x_in_ys, 
-      simp [subset_iff] at h_ys_def,
-      exact ⟨h_ys_def x_in_ys, or.inl x_in_ys⟩ },
+    { simp only [subset_iff, list.mem_to_finset],
+      intros x x_in_ys,
+      apply Γ'_low,
+      simp only [FV, FV_expr, mem_union, list.mem_to_finset],
+      exact or.inl x_in_ys },
     { intro h,
-      simp [FV, FV_expr] at h, 
-      cases h,
-      contradiction },
-    { have : ∀ y ∈ h_Γ, y ∈ FV h_F ↔ y ∈ FV (h_z ≔ h_c⟦h_ys…⟧; h_F),
-      { intros y y_in_h_Γ,
-        split;
-        intro h,
-        { simp [FV, FV_expr],
-          by_cases eq : y = h_z,
-          { rw eq at y_in_h_Γ,
-            contradiction },
-          { exact or.inr ⟨eq, h⟩ } },
-        { simp [FV, FV_expr] at h,
-          cases h,
-          { sorry } } } }
+      exact absurd (Γ'_high h) h_z_undef },
+    {  }
+    
      }
 end
 
