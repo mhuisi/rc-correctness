@@ -319,15 +319,17 @@ end
 
 section foo
 
+open finset
+
 lemma wf_sandwich {β : const → var → ob_lin_type} {δ : const → fn} {Γ Γ' Γ'' Δ : finset var} {F : fn_body} 
   (Γ_sub_Γ' : Γ ⊆ Γ') (Γ'_sub_Γ'' : Γ' ⊆ Γ'') (hΓ : β; δ; Γ; Δ ⊢ F) (hΓ'' : β; δ; Γ''; Δ ⊢ F)
   : β; δ; Γ'; Δ ⊢ F :=
 begin
-  with_cases { induction F using rc_correctness.fn_body.rec_wf generalizing Γ Γ'' },
+  with_cases { induction F using rc_correctness.fn_body.rec_wf generalizing Γ Γ' Γ'' Δ },
   case ret : x {
     apply fn_body_wf.ret,
     cases hΓ,
-    exact finset.subset_iff.mp Γ_sub_Γ' hΓ_x_def
+    exact subset_iff.mp Γ_sub_Γ' hΓ_x_def
   },
   case «let» : x e F ih {
     cases e,
@@ -339,15 +341,90 @@ begin
         { exact hΓ_ys_def },
         { assumption } },
       { intro h,
-        have h', from finset.subset_iff.mp Γ'_sub_Γ'' h,
+        have h', from subset_iff.mp Γ'_sub_Γ'' h,
         contradiction },
-      {  }
-       }
-    
+      { have h1 : insert x Γ ⊆ insert x Γ', from insert_subset_insert x Γ_sub_Γ',
+        have h2 : insert x Γ' ⊆ insert x Γ'', from insert_subset_insert x Γ'_sub_Γ'',
+        exact ih h1 h2 hΓ_F_wf hΓ''_F_wf } },
+    { cases hΓ,
+      cases hΓ'',
+      apply fn_body_wf.let_const_app_part;
+      try { assumption },
+      { transitivity,
+        { exact hΓ_ys_def },
+        { assumption } },
+      { intro h,
+        have h', from subset_iff.mp Γ'_sub_Γ'' h,
+        contradiction },
+      { have h1 : insert x Γ ⊆ insert x Γ', from insert_subset_insert x Γ_sub_Γ',
+        have h2 : insert x Γ' ⊆ insert x Γ'', from insert_subset_insert x Γ'_sub_Γ'',
+        exact ih h1 h2 hΓ_F_wf hΓ''_F_wf } },
+    { cases hΓ,
+      cases hΓ'', 
+      apply fn_body_wf.let_var_app;
+      try { assumption }, 
+      { exact subset_iff.mp Γ_sub_Γ' hΓ_x_def },
+      { exact subset_iff.mp Γ_sub_Γ' hΓ_y_in_Γ },
+      { intro h,
+        have h', from subset_iff.mp Γ'_sub_Γ'' h,
+        contradiction },
+      { have h1 : insert x Γ ⊆ insert x Γ', from insert_subset_insert x Γ_sub_Γ',
+        have h2 : insert x Γ' ⊆ insert x Γ'', from insert_subset_insert x Γ'_sub_Γ'',
+        exact ih h1 h2 hΓ_F_wf hΓ''_F_wf } },
+    { cases hΓ,
+      cases hΓ'', 
+      apply fn_body_wf.let_ctor;
+      try { assumption }, 
+      { transitivity,
+        { exact hΓ_ys_def },
+        { assumption } },
+      { intro h,
+        have h', from subset_iff.mp Γ'_sub_Γ'' h,
+        contradiction },
+      { have h1 : insert x Γ ⊆ insert x Γ', from insert_subset_insert x Γ_sub_Γ',
+        have h2 : insert x Γ' ⊆ insert x Γ'', from insert_subset_insert x Γ'_sub_Γ'',
+        exact ih h1 h2 hΓ_F_wf hΓ''_F_wf } },
+    { cases hΓ,
+      cases hΓ'', 
+      apply fn_body_wf.let_proj;
+      try { assumption }, 
+      { exact subset_iff.mp Γ_sub_Γ' hΓ_x_def },
+      { intro h,
+        have h', from subset_iff.mp Γ'_sub_Γ'' h,
+        contradiction },
+      { have h1 : insert x Γ ⊆ insert x Γ', from insert_subset_insert x Γ_sub_Γ',
+        have h2 : insert x Γ' ⊆ insert x Γ'', from insert_subset_insert x Γ'_sub_Γ'',
+        exact ih h1 h2 hΓ_F_wf hΓ''_F_wf } },
+    { cases hΓ,
+      cases hΓ'', 
+      apply fn_body_wf.let_reset;
+      try { assumption }, 
+      { exact subset_iff.mp Γ_sub_Γ' hΓ_x_def },
+      { intro h,
+        have h', from subset_iff.mp Γ'_sub_Γ'' h,
+        contradiction },
+      { have h1 : insert x Γ ⊆ insert x Γ', from insert_subset_insert x Γ_sub_Γ',
+        have h2 : insert x Γ' ⊆ insert x Γ'', from insert_subset_insert x Γ'_sub_Γ'',
+        exact ih h1 h2 hΓ_F_wf hΓ''_F_wf } },
+    { cases hΓ,
+      cases hΓ'', 
+      rw hΓ''_Δ'_def at hΓ_Δ'_def,
+      simp only [insert_eq_of_mem hΓ''_x_def, insert_eq_of_mem hΓ_x_def] at hΓ_Δ'_def,
+      apply fn_body_wf.let_reuse;
+      try { assumption }, 
+      { transitivity,
+        { exact hΓ_ys_def },
+        { assumption } },
+      { exact subset_iff.mp Γ_sub_Γ' hΓ_x_def },
+      { intro h,
+        have h', from subset_iff.mp Γ'_sub_Γ'' h,
+        contradiction },
+      { have h1 : insert x Γ ⊆ insert x Γ', from insert_subset_insert x Γ_sub_Γ',
+        have h2 : insert x Γ' ⊆ insert x Γ'', from insert_subset_insert x Γ'_sub_Γ'',
+        exact ih h1 h2 hΓ_F_wf hΓ''_F_wf } },
   }
 end
 
-open finset
 lemma foo {β : const → var → ob_lin_type} {δ : const → fn} {Γ Γ' Δ : finset var} {F : fn_body} 
   (Γ'_low : FV F ⊆ Γ') (Γ'_high : Γ' ⊆ Γ) (h : β; δ; Γ; Δ ⊢ F)
   : β; δ; Γ'; Δ ⊢ F :=
