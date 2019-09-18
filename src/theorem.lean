@@ -394,27 +394,47 @@ begin
     { rwa @list.filter_cons_of_neg _ (λ (y : var), βₗ y = 𝕆 ∧ y ∉ FV F) _ _ ys_tl (λ h, absurd h.left ys_hd_ty) } }
 end
 
-theorem rc_insertion_correctness' (β : const → var → ob_lin_type) (δ : const → fn) (c : const) 
-  (y𝕆 y𝕆' y𝔹 yℝ : multiset var) (y𝕆'_sub_y𝕆 : y𝕆' ⊆ y𝕆)
-  (y𝕆_𝕆 : ∀ y ∈ y𝕆, β c y = 𝕆) (y𝕆'_𝕆 : ∀ y ∈ y𝕆', β c y = 𝕆)
-  (y𝔹_𝔹 : ∀ y ∈ y𝔹, β c y = 𝔹) (yℝ_ℝ : ∀ y ∈ yℝ, ↑(β c y) = ℝ)
-  (y𝕆'_sub_FV : y𝕆'.to_finset ⊆ FV (δ c).F) (wf : β; δ; to_finset (y𝕆 + y𝔹); ∅ ⊢ (δ c).F)
-  (dj_y𝕆'_y𝔹 : multiset.disjoint y𝕆' y𝔹) (dj_y𝕆'_yℝ : multiset.disjoint y𝕆' yℝ) (dj_y𝔹_yℝ : multiset.disjoint y𝔹 yℝ) 
-  : β; (y𝕆' {∶} 𝕆) + (y𝔹 {∶} 𝔹) ⊩ C β ((δ c).F) (β c) ∷ 𝕆 :=
+lemma inductive_weakening {β : const → var → ob_lin_type} {ys : multiset typed_var} {y𝔹 : multiset var} 
+  {r : rc} {τ : lin_type} 
+  (h : β; ys ⊩ r ∷ τ)
+  : β; ys + (y𝔹 {∶} 𝔹) ⊩ r ∷ τ :=
 begin
-  simp only [to_finset_add] at wf, 
+  induction y𝔹 using multiset.induction_on,
+  { rw map_zero (λ (x : var), x ∶ ↑𝔹), }
+end
+
+theorem rc_insertion_correctness' (β : const → var → ob_lin_type) (δ : const → fn) (c : const) 
+  (y𝕆 y𝔹 yℝ : finset var)
+  (y𝕆_𝕆 : ∀ y ∈ y𝕆, β c y = 𝕆) (y𝔹_𝔹 : ∀ y ∈ y𝔹, β c y = 𝔹) (yℝ_ℝ : ∀ y ∈ yℝ, ↑(β c y) = ℝ)
+  (y𝕆_sub_FV : y𝕆 ⊆ FV (δ c).F) (wf : β; δ; y𝕆 ∪ y𝔹; ∅ ⊢ (δ c).F)
+  : β; (y𝕆.val {∶} 𝕆) + (y𝔹.val {∶} 𝔹) ⊩ C β ((δ c).F) (β c) ∷ 𝕆 :=
+begin
+  rw finset.subset_iff at y𝕆_sub_FV,
   with_cases { induction idef : (δ c).F using rc_correctness.fn_body.rec_wf },
   case ret : x {
     rw idef at *,
     unfold C,
-    unfold FV at y𝕆'_sub_FV,
+    unfold FV at y𝕆_sub_FV,
     cases wf,
-    simp only [mem_union, ndunion_eq_union, to_finset_val, nodup_erase_dup, and_self,
-      nodup_union, mem_erase_dup, finset.union_val, finset.mem_mk] at wf_x_def,
+    simp only [mem_ndunion, finset.mem_mk] at wf_x_def,
     unfold inc_𝕆,
     cases wf_x_def,
     { have : β c x = 𝕆 ∧ x ∉ ∅, from ⟨y𝕆_𝕆 x wf_x_def, finset.not_mem_empty x⟩,
-      rw if_pos this, }
+      rw if_pos this,
+      have : y𝕆 = {x},
+      { ext, 
+        split;
+        intro h,
+        { exact y𝕆_sub_FV h },
+        { rwa ←finset.mem_def at  wf_x_def,
+          simp only [finset.insert_empty_eq_singleton, finset.mem_singleton] at h,
+          rwa h } },
+      rw this,
+      simp only [finset.singleton_val, finset.insert_empty_eq_singleton, zero_add, map_cons, cons_add, map_zero],
+      apply linear.ret,
+      rw ←singleton_add,
+      apply inductive_weakening,
+      apply linear.var }
   }
 end
 

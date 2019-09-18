@@ -37,7 +37,7 @@ notation Γ `; ` Δ ` ⊢ `:1 F := fn_body_wf Γ Δ F
   (z_used : z ∈ FV F) (z_undef : z ∉ Γ) (F_wf : insert z Γ; insert z Δ ⊢ F) :
   Γ; Δ ⊢ (z ≔ reset x; F)
 | let_reuse {Γ Δ Δ' : finset var} {z : var} {x : var} (i : cnstr) {ys : list var} {F : fn_body}
-  (ys_def : ys.to_finset ⊆ Γ) (x_def : x ∈ Γ) (foo : Δ' = insert x Δ)
+  (ys_def : ys.to_finset ⊆ Γ) (x_def : x ∈ Γ) (Δ'_def : Δ' = insert x Δ)
   (z_used : z ∈ FV F) (z_undef : z ∉ Γ) (F_wf : insert z Γ; Δ ⊢ F) :
   Γ; Δ' ⊢ (z ≔ reuse x in ⟪ys⟫i; F)
 | «case» {Γ Δ : finset var} {x : var} {Fs : list fn_body}
