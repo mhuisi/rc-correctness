@@ -414,7 +414,7 @@ section sandwich
     all_goals {
       apply wf_sandwich _ _ h_ih h_F_wf,
       { exact subset_insert h_x (FV h_F) },
-      simp [subset_iff],
+      simp only [subset_iff, mem_insert],
       intros x h,
       cases h,
       { rwa h },
@@ -464,19 +464,6 @@ open multiset (hiding coe_sort)
 
 axiom nodup_params (δ : const → fn) (c : const) : list.nodup (δ c).ys
 
-lemma nodup_type_context_params (β : const → var → lin_type) (δ : const → fn) (c : const) 
-  : nodup (map (λ t, (t : typed_var).x) ↑(list.map (λ (y : var), y ∶ β c y) (δ c).ys)) :=
-begin
-  simp only [coe_nodup, coe_map, list.map_map], 
-  apply @nodup_map _ _ _ (δ c).ys,
-  { unfold function.injective,
-    intros a b h,
-    simp only [function.comp_app] at h,
-    assumption },
-  simp only [coe_nodup],
-  exact nodup_params δ c
-end
-
 lemma linear_dec_o_vars {β : const → var → lin_type} {Γ : type_context} {ys : list var} {F : fn_body} {βₗ : var → lin_type}
   (h : β; Γ ⊩ F ∷ 𝕆) (d : nodup ys)
   : β; (filter (λ y : var, βₗ y = 𝕆 ∧ y ∉ FV F) ↑ys {∶} 𝕆) + Γ ⊩ dec_𝕆 ys F βₗ ∷ 𝕆 :=
@@ -507,8 +494,13 @@ lemma inductive_weakening {β : const → var → lin_type} {ys : multiset typed
   (h : β; ys ⊩ r ∷ τ)
   : β; ys + (y𝔹 {∶} 𝔹) ⊩ r ∷ τ :=
 begin
-  induction y𝔹 using multiset.induction_on,
-  { rw map_zero (λ (x : var), x ∶ 𝔹), }
+  apply multiset.induction_on y𝔹,
+  { simp only [map_zero, add_zero], 
+    assumption },
+  intros a s ih,
+  simp only [map_cons, add_cons],
+  apply linear.weaken,
+  assumption
 end
 
 theorem rc_insertion_correctness' (β : const → var → lin_type) (δ : const → fn) (c : const) 
@@ -534,7 +526,7 @@ begin
         split;
         intro h,
         { exact y𝕆_sub_FV h },
-        { rwa ←finset.mem_def at  wf_x_def,
+        { rwa ←finset.mem_def at wf_x_def,
           simp only [finset.insert_empty_eq_singleton, finset.mem_singleton] at h,
           rwa h } },
       rw this,
@@ -570,11 +562,8 @@ begin
   { repeat { split };
     { intros y y_in_ys y_ty, 
       simp only [mem_filter, mem_coe], try { rw ←coe_eq_coe }, exact ⟨y_in_ys, y_ty⟩ } },
-  have dj_y𝕆_y𝔹 : multiset.disjoint y𝕆 y𝔹,
-  { rw disjoint_filter_filter,
-      intros x x_in_ys x_ty,
-      rw x_ty,
-      simp only [not_false_iff] },
+  obtain ⟨nd_y𝕆, nd_y𝔹⟩ : multiset.nodup y𝕆 ∧ multiset.nodup y𝔹,
+  { split; exact nodup_filter _ (coe_nodup.mpr (nodup_params δ c)) },
   have ys_subdiv : ↑ys = y𝕆 + y𝔹,
   { rw filter_add_filter,
     have : ∀ y ∈ ↑ys, β c y = 𝕆 ∧ β c y = 𝔹 ↔ false,
@@ -625,7 +614,6 @@ begin
   apply linear_dec_o_vars _ (nodup_params δ c), 
   let y𝕆' := filter (λ (y : var), y ∈ FV (C β ((δ c).F) (β c))) y𝕆,
   have y𝕆'_sub_y𝕆 : y𝕆' ⊆ y𝕆, from filter_subset y𝕆,
-  have dj_y𝕆'_y𝔹, from disjoint_of_subset_left y𝕆'_sub_y𝕆 dj_y𝕆_y𝔹,
   have y𝕆'_sub_FV : y𝕆'.to_finset ⊆ FV (δ c).F,
   { rw finset.subset_iff, rw finset.subset_iff at y𝕆_sub_FV, rw subset_iff at y𝕆'_sub_y𝕆,
     simp only [mem_to_finset], simp only [mem_to_finset] at y𝕆_sub_FV,
@@ -637,8 +625,27 @@ begin
     cases h,
     { exact absurd x_in_y𝕆'.right h.right.right },
     rwa FV_C_eq_FV at h },
-  
-  sorry
+  have wf' : (β; δ; to_finset y𝕆' ∪ to_finset y𝔹 ⊢ (δ c).F),
+  { rw to_finset_add at wf,
+    have h1 : FV (δ c).F ⊆ to_finset y𝕆' ∪ to_finset y𝔹,
+    { have : FV (δ c).F ⊆ to_finset y𝕆 ∪ to_finset y𝔹, from FV_subset_finset_var wf,
+      rw finset.subset_iff at this,
+      rw finset.subset_iff,
+      intros x x_in_FV,
+      let := this x_in_FV,
+      simp only [mem_filter, mem_coe, finset.mem_union, mem_to_finset] at this ⊢, 
+      cases this,
+      { rw FV_C_eq_FV,
+        exact or.inl ⟨this_1, x_in_FV ⟩ },
+      { exact or.inr this_1 } },
+    have h2 : to_finset y𝕆' ∪ to_finset y𝔹 ⊆ to_finset y𝕆 ∪ to_finset y𝔹,
+    { rw subset_iff at y𝕆'_sub_y𝕆,
+      simp only [finset.subset_iff, finset.mem_union, mem_to_finset], 
+      intros x h,
+      cases h,
+      { exact or.inl (y𝕆'_sub_y𝕆 h) },
+      { exact or.inr h } },
+    exact wf_FV_sandwich h1 h2 wf }
 end
 
 end rc_correctness
