@@ -13,8 +13,6 @@ inductive expr : Type
 | var_app (x : var) (y : var) : expr
 | ctor (i : cnstr) (ys : list var) : expr
 | proj (i : cnstr) (x : var) : expr
-| reset (x : var) : expr
-| reuse (x : var) (i : cnstr) (ys : list var) : expr
 
 inductive fn_body : Type
 | ret (x : var) : fn_body 
@@ -43,7 +41,6 @@ notation c `⟦` ys `…` `, ` `_` `⟧` := expr.const_app_part c ys
 notation x `⟦` y `⟧` := expr.var_app x y
 notation `⟪` ys `⟫` i := expr.ctor i ys
 notation x `[` i `]` := expr.proj i x
-notation `reuse ` x ` in ` `⟪` ys `⟫` i := expr.reuse x i ys
 
 -- fn_body
 notation x ` ≔ ` e `; ` F := fn_body.let x e F
@@ -82,8 +79,6 @@ def FV_expr : expr → finset var
 | (x⟦y⟧) := {x, y}
 | (⟪xs⟫i) := xs.to_finset
 | (x[i]) := {x}
-| (reset x) := {x}
-| (reuse x in ⟪xs⟫i) := insert x xs.to_finset
 
 def FV : fn_body → finset var
 | (ret x) := {x}
@@ -120,8 +115,6 @@ def expr_repr : expr → string
 | (x⟦y⟧) := x.repr ++ "⟦" ++ y.repr ++ "⟧"
 | (⟪ys⟫i) := "⟪" ++ ys.repr ++ "⟫" ++ i.repr 
 | (x[i]) := x.repr ++ "[" ++ i.repr ++ "]"
-| (reset x) := "reset " ++ x.repr
-| (reuse x in ⟪ys⟫i) := "reuse " ++ x.repr ++ " in " ++ "⟪" ++ ys.repr ++ "⟫" ++ i.repr
 
 instance expr_has_repr : has_repr expr := ⟨expr_repr⟩ 
 

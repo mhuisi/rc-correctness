@@ -3,23 +3,8 @@ import ast
 namespace rc_correctness
 
 @[derive decidable_eq]
-inductive ob_lin_type : Type 
-  | 𝕆 | 𝔹
-
-@[derive decidable_eq]
 inductive lin_type : Type
-  | ob : ob_lin_type → lin_type
-  | ℝ : lin_type
-
-instance ob_lin_type_to_lin_type : has_coe ob_lin_type lin_type := ⟨lin_type.ob⟩
-
-@[simp] lemma coe_eq_coe {t1 t2 : ob_lin_type} : (↑t1 : lin_type) = ↑t2 ↔ t1 = t2 :=
-begin
-  split;
-  intro h,
-  { exact lin_type.ob.inj h },
-  rw h
-end
+  | 𝕆 | 𝔹
 
 structure typed_rc := (c : rc) (ty : lin_type)
 
@@ -35,10 +20,9 @@ abbreviation type_context := multiset typed_var
 
 open rc_correctness.expr
 open rc_correctness.fn_body
-open rc_correctness.ob_lin_type
 open rc_correctness.lin_type
 
-inductive linear (β : const → var → ob_lin_type) : type_context → typed_rc → Prop
+inductive linear (β : const → var → lin_type) : type_context → typed_rc → Prop
 notation Γ ` ⊩ `:1 t := linear Γ t
 | var (x : var) (τ : lin_type) : 
   (x ∶ τ)::0 ⊩ x ∷ τ
@@ -54,12 +38,9 @@ notation Γ ` ⊩ `:1 t := linear Γ t
 | inc_b {Γ : type_context} {x : var} {F : fn_body}
   (x_𝔹 : (x ∶ 𝔹) ∈ Γ) (F_𝕆 : (x ∶ 𝕆) :: Γ ⊩ F ∷ 𝕆) :
   Γ ⊩ (inc x; F) ∷ 𝕆
-| dec_o {Γ : type_context} (x : var) {F : fn_body}
+| «dec» {Γ : type_context} (x : var) {F : fn_body}
   (F_𝕆 : Γ ⊩ F ∷ 𝕆) :
   (x ∶ 𝕆) :: Γ ⊩ (dec x; F) ∷ 𝕆
-| dec_r {Γ : type_context} (x : var) {F : fn_body}
-  (F_𝕆 : Γ ⊩ F ∷ 𝕆) :
-  (x ∶ ℝ) :: Γ ⊩ (dec x; F) ∷ 𝕆
 | ret {Γ : type_context} {x : var}
   (x_𝕆 : Γ ⊩ x ∷ 𝕆) :
   Γ ⊩ (ret x) ∷ 𝕆
@@ -78,15 +59,8 @@ notation Γ ` ⊩ `:1 t := linear Γ t
   (x ∶ 𝕆) :: (y ∶ 𝕆) :: 0 ⊩ x⟦y⟧ ∷ 𝕆
 | cnstr_app (ys : list var) (i : cnstr) :
   ys [∶] 𝕆 ⊩ (⟪ys⟫i) ∷ 𝕆
-| reset (x : var) :
-  (x ∶ 𝕆) :: 0 ⊩ (reset x) ∷ ℝ
-| «reuse» (x : var) (ys : list var) (i : cnstr) :
-  (x ∶ ℝ) :: (ys [∶] 𝕆) ⊩ (reuse x in ⟪ys⟫i) ∷ 𝕆
-| let_o {Γ : type_context} {xs : list var} {e : expr} {Δ : type_context} {z : var} {F : fn_body}
+| «let» {Γ : type_context} {xs : list var} {e : expr} {Δ : type_context} {z : var} {F : fn_body}
   (xs_𝕆 : (xs [∶] 𝕆) ⊆ Δ) (e_𝕆 : Γ + (xs [∶] 𝔹) ⊩ e ∷ 𝕆) (F_𝕆 : (z ∶ 𝕆) :: Δ ⊩ F ∷ 𝕆) :
-  Γ + Δ ⊩ (z ≔ e; F) ∷ 𝕆
-| let_r {Γ : type_context} {xs : list var} {e : expr} {Δ : type_context} {z : var} {F : fn_body}
-  (xs_𝕆 : (xs [∶] 𝕆) ⊆ Δ) (e_𝕆 : Γ + (xs [∶] 𝔹) ⊩ e ∷ 𝕆) (F_𝕆 : (z ∶ ℝ) :: Δ ⊩ F ∷ 𝕆) :
   Γ + Δ ⊩ (z ≔ e; F) ∷ 𝕆
 | proj_bor {Γ : type_context} {x y : var} {F : fn_body} (i : cnstr)
   (x_𝔹 : (x ∶ 𝔹) ∈ Γ) (F_𝕆 : (y ∶ 𝔹) :: Γ ⊩ F ∷ 𝕆) :
@@ -97,7 +71,7 @@ notation Γ ` ⊩ `:1 t := linear Γ t
 
 notation β `; ` Γ ` ⊩ `:1 t := linear β Γ t
 
-inductive linear_const (β : const → var → ob_lin_type) (δ : const → fn) : const → Prop
+inductive linear_const (β : const → var → lin_type) (δ : const → fn) : const → Prop
 notation ` ⊩ `:1 c := linear_const c
 | const {c : const}
   (F_𝕆 : β; (δ c).ys.map (λ y, y ∶ β c y) ⊩ (δ c).F ∷ 𝕆) :
@@ -105,7 +79,7 @@ notation ` ⊩ `:1 c := linear_const c
 
 notation β `; ` δ ` ⊩ `:1 c := linear_const β δ c
 
-inductive linear_program (β : const → var → ob_lin_type) : (const → fn) → Prop
+inductive linear_program (β : const → var → lin_type) : (const → fn) → Prop
 notation ` ⊩ `:1 δ := linear_program δ
 | program {δ : const → fn}
   (const_typed : ∀ c : const, (β; δ ⊩ c)) :
