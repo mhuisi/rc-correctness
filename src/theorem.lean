@@ -180,7 +180,7 @@ section FV_C
       { exact xs_ih heq h } }
   end
 
-  theorem C_no_new_vars (β : const → var → lin_type) (F : fn_body) (βₗ : var → lin_type) : FV (C β F βₗ) = FV F :=
+  theorem FV_C_eq_FV (β : const → var → lin_type) (F : fn_body) (βₗ : var → lin_type) : FV (C β F βₗ) = FV F :=
   begin
     with_cases { induction F using rc_correctness.fn_body.rec_wf generalizing βₗ },
     case ret : x {
@@ -277,6 +277,156 @@ section FV_C
   end
 end FV_C
 
+section sandwich
+  open finset
+
+  lemma wf_sandwich {β : const → var → lin_type} {δ : const → fn} {Γ Γ' Γ'' : finset var} {F : fn_body} 
+    (Γ_sub_Γ' : Γ ⊆ Γ') (Γ'_sub_Γ'' : Γ' ⊆ Γ'') (hΓ : β; δ; Γ ⊢ F) (hΓ'' : β; δ; Γ'' ⊢ F)
+    : β; δ; Γ' ⊢ F :=
+  begin
+    with_cases { induction F using rc_correctness.fn_body.rec_wf generalizing Γ Γ' Γ'' },
+    case ret : x {
+      apply fn_body_wf.ret,
+      cases hΓ,
+      exact subset_iff.mp Γ_sub_Γ' hΓ_x_def
+    },
+    case «let» : x e F ih {
+      cases e;
+      cases hΓ;
+      cases hΓ'';
+      let h1 := insert_subset_insert x Γ_sub_Γ';
+      let h2 := insert_subset_insert x Γ'_sub_Γ'',
+      any_goals { 
+        apply fn_body_wf.let_const_app_full 
+        <|> apply fn_body_wf.let_const_app_part
+        <|> apply fn_body_wf.let_var_app
+        <|> apply fn_body_wf.let_ctor
+        <|> apply fn_body_wf.let_proj },
+      any_goals { assumption },
+      any_goals {
+        transitivity,
+        { exact hΓ_ys_def },
+        { assumption }
+      },
+      any_goals {
+        intro h,
+        have h', from subset_iff.mp Γ'_sub_Γ'' h,
+        contradiction
+      },
+      any_goals { exact ih h1 h2 hΓ_F_wf hΓ''_F_wf },
+      any_goals { exact subset_iff.mp Γ_sub_Γ' hΓ_x_def },
+      any_goals { exact subset_iff.mp Γ_sub_Γ' hΓ_y_in_Γ }
+    },
+    case «case» : x Fs ih {
+      cases hΓ,
+      cases hΓ'',
+      apply fn_body_wf.case,
+      { exact subset_iff.mp Γ_sub_Γ' hΓ_x_def },
+      intros F F_in_Fs,
+      exact ih F F_in_Fs Γ_sub_Γ' Γ'_sub_Γ'' (hΓ_Fs_wf F F_in_Fs) (hΓ''_Fs_wf F F_in_Fs)
+    },
+    case «inc» : x F ih {
+      cases hΓ,
+      cases hΓ'',
+      apply fn_body_wf.inc,
+      { exact subset_iff.mp Γ_sub_Γ' hΓ_x_def },
+      exact ih Γ_sub_Γ' Γ'_sub_Γ'' hΓ_F_wf hΓ''_F_wf
+    },
+    case «dec» : x F ih {
+      cases hΓ,
+      cases hΓ'',
+      apply fn_body_wf.dec,
+      { exact subset_iff.mp Γ_sub_Γ' hΓ_x_def },
+      exact ih Γ_sub_Γ' Γ'_sub_Γ'' hΓ_F_wf hΓ''_F_wf
+    }
+  end
+
+  lemma FV_wf {β : const → var → lin_type} {δ : const → fn} {Γ : finset var} {F : fn_body} (h : β; δ; Γ ⊢ F)
+    : β; δ; FV F ⊢ F :=
+  begin
+    induction h,
+    { apply fn_body_wf.ret,
+      simp only [FV, insert_empty_eq_singleton, mem_singleton] },
+    any_goals {
+      apply fn_body_wf.let_const_app_full
+      <|> apply fn_body_wf.let_const_app_part
+      <|> apply fn_body_wf.let_var_app
+      <|> apply fn_body_wf.let_ctor
+      <|> apply fn_body_wf.let_proj
+    },
+    any_goals { simp [FV, FV_expr, subset_union_left, not_or_distrib] },
+    any_goals { 
+      intro h,
+      simp only [subset_iff, list.mem_to_finset] at h_ys_def,
+      have : h_z ∈ h_Γ, from h_ys_def h,
+      contradiction 
+    },
+    any_goals { split },
+    any_goals { 
+      intro h,
+      rw h at h_z_undef,
+      contradiction 
+    },
+    any_goals { apply wf_sandwich _ _ h_ih h_F_wf },
+    any_goals { 
+      simp only [subset_iff, mem_union, mem_insert, mem_erase],
+      intros x x_in_FV,
+      by_cases eq : x = h_z,
+      { exact or.inl eq },
+      { repeat { apply or.inr },
+        exact ⟨eq, x_in_FV⟩ } 
+    },
+    any_goals { 
+      apply insert_subset_insert,
+      simp only [subset_iff, mem_union, list.mem_to_finset, mem_erase, mem_insert, mem_singleton],
+      intros x h,
+      repeat { cases h }
+    },
+    any_goals { 
+      simp only [subset_iff, list.mem_to_finset] at h_ys_def,
+      exact h_ys_def h 
+    },
+    any_goals { 
+      cases mem_insert.mp (subset_iff.mp (FV_subset_finset_var h_F_wf) h_right), 
+      { contradiction },
+      { assumption } 
+    }, 
+    any_goals { assumption },
+    { apply fn_body_wf.case,
+      { exact mem_insert_self h_x _ },
+      intros F F_in_Fs,
+      apply wf_sandwich _ _ (h_ih F F_in_Fs) (h_Fs_wf F F_in_Fs);
+      simp only [subset_iff, list.map_wf_eq_map, exists_prop, mem_join, mem_insert, list.mem_map], 
+      { intros x x_in_FV, 
+        apply or.inr,
+        use FV F, 
+        use F,
+        { exact ⟨F_in_Fs, rfl⟩ },
+        { assumption } },
+      { intros x h,
+        cases h,
+        { rwa h },
+        rcases h with ⟨S, ⟨⟨a, ⟨a_in_Fs, a_def⟩⟩, x_in_S⟩⟩,
+        rw ←a_def at x_in_S,
+        exact subset_iff.mp (FV_subset_finset_var (h_Fs_wf a a_in_Fs)) x_in_S } },
+    any_goals { apply fn_body_wf.dec <|> apply fn_body_wf.inc },
+    any_goals { exact mem_insert_self h_x (FV h_F) },
+    all_goals {
+      apply wf_sandwich _ _ h_ih h_F_wf,
+      { exact subset_insert h_x (FV h_F) },
+      simp [subset_iff],
+      intros x h,
+      cases h,
+      { rwa h },
+      exact subset_iff.mp (FV_subset_finset_var h_F_wf) h
+    }
+  end
+
+  lemma wf_FV_sandwich {β : const → var → lin_type} {δ : const → fn} {Γ Γ' : finset var} {F : fn_body} 
+    (Γ'_low : FV F ⊆ Γ') (Γ'_high : Γ' ⊆ Γ) (h : β; δ; Γ ⊢ F)
+    : β; δ; Γ' ⊢ F := wf_sandwich Γ'_low Γ'_high (FV_wf h) h
+end sandwich
+
 lemma vars_sub_FV_dec_𝕆 (ys : list var) (F : fn_body) (βₗ : var → lin_type) 
   : ∀ y ∈ ys, βₗ y = 𝕆 → y ∈ FV (dec_𝕆 ys F βₗ) :=
 begin
@@ -309,192 +459,6 @@ begin
     cases g2; contradiction },
   { exact ys_ih nodup_ys_tl }
 end
-
-section foo
-
-open finset
-
-lemma wf_sandwich {β : const → var → lin_type} {δ : const → fn} {Γ Γ' Γ'' : finset var} {F : fn_body} 
-  (Γ_sub_Γ' : Γ ⊆ Γ') (Γ'_sub_Γ'' : Γ' ⊆ Γ'') (hΓ : β; δ; Γ ⊢ F) (hΓ'' : β; δ; Γ'' ⊢ F)
-  : β; δ; Γ' ⊢ F :=
-begin
-  with_cases { induction F using rc_correctness.fn_body.rec_wf generalizing Γ Γ' Γ'' },
-  case ret : x {
-    apply fn_body_wf.ret,
-    cases hΓ,
-    exact subset_iff.mp Γ_sub_Γ' hΓ_x_def
-  },
-  case «let» : x e F ih {
-    cases e;
-    cases hΓ;
-    cases hΓ'';
-    let h1 := insert_subset_insert x Γ_sub_Γ';
-    let h2 := insert_subset_insert x Γ'_sub_Γ'',
-    any_goals { 
-      apply fn_body_wf.let_const_app_full 
-      <|> apply fn_body_wf.let_const_app_part
-      <|> apply fn_body_wf.let_var_app
-      <|> apply fn_body_wf.let_ctor
-      <|> apply fn_body_wf.let_proj
-      <|> apply fn_body_wf.let_reset },
-    any_goals { assumption },
-    any_goals {
-      transitivity,
-      { exact hΓ_ys_def },
-      { assumption }
-    },
-    any_goals {
-      intro h,
-      have h', from subset_iff.mp Γ'_sub_Γ'' h,
-      contradiction
-    },
-    any_goals { exact ih h1 h2 hΓ_F_wf hΓ''_F_wf },
-    any_goals { exact subset_iff.mp Γ_sub_Γ' hΓ_x_def },
-    any_goals { exact subset_iff.mp Γ_sub_Γ' hΓ_y_in_Γ }
-  },
-  case «case» : x Fs ih {
-    cases hΓ,
-    cases hΓ'',
-    apply fn_body_wf.case,
-    { exact subset_iff.mp Γ_sub_Γ' hΓ_x_def },
-    intros F F_in_Fs,
-    exact ih F F_in_Fs Γ_sub_Γ' Γ'_sub_Γ'' (hΓ_Fs_wf F F_in_Fs) (hΓ''_Fs_wf F F_in_Fs)
-  },
-  case «inc» : x F ih {
-    cases hΓ,
-    cases hΓ'',
-    apply fn_body_wf.inc,
-    { exact subset_iff.mp Γ_sub_Γ' hΓ_x_def },
-    exact ih Γ_sub_Γ' Γ'_sub_Γ'' hΓ_F_wf hΓ''_F_wf
-  },
-  case «dec» : x F ih {
-    cases hΓ,
-    cases hΓ'',
-    apply fn_body_wf.dec,
-    { exact subset_iff.mp Γ_sub_Γ' hΓ_x_def },
-    exact ih Γ_sub_Γ' Γ'_sub_Γ'' hΓ_F_wf hΓ''_F_wf
-  }
-end
-
-lemma bar {β : const → var → lin_type} {δ : const → fn} {Γ : finset var} {F : fn_body} (h : β; δ; Γ ⊢ F)
-  : β; δ; FV F ⊢ F :=
-begin
-  induction h,
-  { apply fn_body_wf.ret,
-    simp only [FV, insert_empty_eq_singleton, mem_singleton] },
-  { apply fn_body_wf.let_const_app_full;
-    try { assumption },
-    { simp only [FV, FV_expr, subset_union_left] },
-    { simp [FV, FV_expr],
-      intro h,
-      simp only [subset_iff, list.mem_to_finset] at h_ys_def,
-      have : h_z ∈ h_Γ, from h_ys_def h,
-      contradiction },
-    { have h1 : FV h_F ⊆ insert h_z (FV (h_z ≔ h_c⟦h_ys…⟧; h_F)),
-      { simp only [FV, subset_iff, mem_union, mem_insert, mem_erase],
-        intros x x_in_FV,
-        by_cases eq : x = h_z,
-        { exact or.inl eq },
-        { exact or.inr (or.inr ⟨eq, x_in_FV⟩) } },
-      have h2 : insert h_z (FV (h_z ≔ h_c⟦h_ys…⟧; h_F)) ⊆ insert h_z h_Γ,
-      { apply insert_subset_insert,
-        simp only [FV, FV_expr, subset_iff, mem_union, list.mem_to_finset, mem_erase],
-        intros x h,
-        cases h,
-        { simp only [subset_iff, list.mem_to_finset] at h_ys_def,
-          exact h_ys_def h },
-        { cases h,
-          have h', from subset_iff.mp (FV_subset_finset_var h_F_wf) h_right,
-          rw mem_insert at h',
-          cases h', 
-          { contradiction },
-          { assumption } } },
-      exact wf_sandwich h1 h2 h_ih h_F_wf } },
-  { apply fn_body_wf.let_const_app_part;
-    try { assumption },
-    { simp only [FV, FV_expr, subset_union_left] },
-    { simp [FV, FV_expr],
-      intro h,
-      simp only [subset_iff, list.mem_to_finset] at h_ys_def,
-      have : h_z ∈ h_Γ, from h_ys_def h,
-      contradiction },
-    { have h1 : FV h_F ⊆ insert h_z (FV (h_z ≔ h_c⟦h_ys…, _⟧; h_F)),
-      { simp only [FV, subset_iff, mem_union, mem_insert, mem_erase],
-        intros x x_in_FV,
-        by_cases eq : x = h_z,
-        { exact or.inl eq },
-        { exact or.inr (or.inr ⟨eq, x_in_FV⟩) } },
-      have h2 : insert h_z (FV (h_z ≔ h_c⟦h_ys…, _⟧; h_F)) ⊆ insert h_z h_Γ,
-      { apply insert_subset_insert,
-        simp only [FV, FV_expr, subset_iff, mem_union, list.mem_to_finset, mem_erase],
-        intros x h,
-        cases h,
-        { simp only [subset_iff, list.mem_to_finset] at h_ys_def,
-          exact h_ys_def h },
-        { cases h,
-          have h', from subset_iff.mp (FV_subset_finset_var h_F_wf) h_right,
-          rw mem_insert at h',
-          cases h', 
-          { contradiction },
-          { assumption } } },
-      exact wf_sandwich h1 h2 h_ih h_F_wf } },
-  { apply fn_body_wf.let_var_app;
-    try { assumption }, 
-    { simp [FV, FV_expr] },
-    { simp [FV, FV_expr] },
-    { simp [FV, FV_expr, not_or_distrib],
-      split;
-      intro h;
-      rw h at h_z_undef;
-      contradiction },
-    { have h1 : FV h_F ⊆ insert h_z (FV (h_z ≔ h_x⟦h_y⟧; h_F)),
-      { simp only [FV, subset_iff, mem_union, mem_insert, mem_erase],
-        intros x x_in_FV,
-        by_cases eq : x = h_z,
-        { exact or.inl eq },
-        { exact or.inr (or.inr ⟨eq, x_in_FV⟩) } },
-      have h2 : insert h_z (FV (h_z ≔ h_x⟦h_y⟧; h_F)) ⊆ insert h_z h_Γ,
-      { apply insert_subset_insert,
-        simp only [FV, FV_expr, subset_iff, mem_union, list.mem_to_finset, mem_erase],
-        intros x h,
-        cases h,
-        { simp only [mem_insert, has_insert_eq_insert, insert_empty_eq_singleton, mem_singleton] at h,
-          cases h;
-          rw h;
-          assumption },
-        { cases h,
-          have h', from subset_iff.mp (FV_subset_finset_var h_F_wf) h_right,
-          rw mem_insert at h',
-          cases h', 
-          { contradiction },
-          { assumption } } },
-      exact wf_sandwich h1 h2 h_ih h_F_wf } },
-end
-
-lemma foo {β : const → var → lin_type} {δ : const → fn} {Γ Γ' : finset var} {F : fn_body} 
-  (Γ'_low : FV F ⊆ Γ') (Γ'_high : Γ' ⊆ Γ) (h : β; δ; Γ ⊢ F)
-  : β; δ; Γ' ⊢ F :=
-begin
-  rw subset_iff at Γ'_low Γ'_high,
-  induction h,
-  { apply fn_body_wf.ret,
-    apply Γ'_low,
-    simp only [FV, finset.insert_empty_eq_singleton, finset.mem_singleton] },
-  { apply fn_body_wf.let_const_app_full;
-    try { assumption },
-    { simp only [subset_iff, list.mem_to_finset],
-      intros x x_in_ys,
-      apply Γ'_low,
-      simp only [FV, FV_expr, mem_union, list.mem_to_finset],
-      exact or.inl x_in_ys },
-    { intro h,
-      exact absurd (Γ'_high h) h_z_undef },
-    {  }
-    
-     }
-end
-
-end foo
 
 open multiset (hiding coe_sort)
 
@@ -672,7 +636,7 @@ begin
     simp only [list.mem_to_finset, finset.mem_union, finset.mem_filter] at h,
     cases h,
     { exact absurd x_in_y𝕆'.right h.right.right },
-    rwa C_no_new_vars at h },
+    rwa FV_C_eq_FV at h },
   
   sorry
 end
