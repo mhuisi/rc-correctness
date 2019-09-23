@@ -8,37 +8,37 @@ open rc_correctness.lin_type
 
 inductive fn_body_wf (β : const → var → lin_type) (δ : const → fn) : finset var → fn_body → Prop
 notation Γ ` ⊢ `:1 F := fn_body_wf Γ F
-| ret {Γ Δ : finset var} {x : var} 
+| ret {Γ : finset var} {x : var} 
   (x_def : x ∈ Γ) :
   Γ ⊢ ret x
-| let_const_app_full {Γ Δ : finset var} {z : var} {c : const} {ys : list var} {F : fn_body}
+| let_const_app_full {Γ : finset var} {z : var} {c : const} {ys : list var} {F : fn_body}
   (ys_def : ys.to_finset ⊆ Γ) (arity_eq : ys.length = (δ c).ys.length)
   (z_used : z ∈ FV F) (z_undef : z ∉ Γ) (F_wf : insert z Γ ⊢ F) :
   Γ ⊢ (z ≔ c⟦ys…⟧; F)
-| let_const_app_part {Γ Δ : finset var} {z : var} {c : const} {ys : list var} {F : fn_body}
+| let_const_app_part {Γ : finset var} {z : var} {c : const} {ys : list var} {F : fn_body}
   (ys_def : ys.to_finset ⊆ Γ) 
   (no_𝔹_var : ∀ x : var, β c x ≠ 𝔹) 
   (z_used : z ∈ FV F) (z_undef : z ∉ Γ) (F_wf : insert z Γ ⊢ F) :
   Γ ⊢ (z ≔ c⟦ys…, _⟧; F)
-| let_var_app {Γ Δ : finset var} {z : var} {x y : var} {F : fn_body}
+| let_var_app {Γ : finset var} {z : var} {x y : var} {F : fn_body}
   (x_def : x ∈ Γ) (y_in_Γ : y ∈ Γ)
   (z_used : z ∈ FV F) (z_undef : z ∉ Γ) (F_wf : insert z Γ ⊢ F) :
   Γ ⊢ (z ≔ x⟦y⟧; F)
-| let_ctor {Γ Δ : finset var} {z : var} (i : cnstr) {ys : list var} {F : fn_body}
+| let_ctor {Γ : finset var} {z : var} (i : cnstr) {ys : list var} {F : fn_body}
   (ys_def : ys.to_finset ⊆ Γ)
   (z_used : z ∈ FV F) (z_undef : z ∉ Γ) (F_wf : insert z Γ ⊢ F) :
   Γ ⊢ (z ≔ ⟪ys⟫i; F)
-| let_proj {Γ Δ : finset var} {z : var} {x : var} (i : cnstr) {F : fn_body}
+| let_proj {Γ : finset var} {z : var} {x : var} (i : cnstr) {F : fn_body}
   (x_def : x ∈ Γ)
   (z_used : z ∈ FV F) (z_undef : z ∉ Γ) (F_wf : insert z Γ ⊢ F) : 
   Γ ⊢ (z ≔ x[i]; F)
-| «case» {Γ Δ : finset var} {x : var} {Fs : list fn_body}
+| «case» {Γ : finset var} {x : var} {Fs : list fn_body}
   (x_def : x ∈ Γ) (Fs_wf : ∀ F ∈ Fs, Γ ⊢ F) :
   Γ ⊢ (case x of Fs)
-| «inc» {Γ Δ : finset var} {x : var} {F : fn_body}
+| «inc» {Γ : finset var} {x : var} {F : fn_body}
   (x_def : x ∈ Γ) (F_wf : Γ ⊢ F) :
   Γ ⊢ inc x; F
-| «dec» {Γ Δ : finset var} {x : var} {F : fn_body}
+| «dec» {Γ : finset var} {x : var} {F : fn_body}
   (x_def : x ∈ Γ) (F_wf : Γ ⊢ F) :
   Γ ⊢ dec x; F
 

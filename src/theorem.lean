@@ -503,12 +503,19 @@ begin
   assumption
 end
 
-theorem rc_insertion_correctness' (β : const → var → lin_type) (δ : const → fn) (c : const) 
-  (y𝕆 y𝔹 yℝ : finset var)
+theorem rc_insertion_correctness' {β : const → var → lin_type} {δ : const → fn} {c : const}
+  {y𝕆 y𝔹 : finset var}
   (y𝕆_𝕆 : ∀ y ∈ y𝕆, β c y = 𝕆) (y𝔹_𝔹 : ∀ y ∈ y𝔹, β c y = 𝔹)
   (y𝕆_sub_FV : y𝕆 ⊆ FV (δ c).F) (wf : β; δ; y𝕆 ∪ y𝔹 ⊢ (δ c).F)
   : β; (y𝕆.val {∶} 𝕆) + (y𝔹.val {∶} 𝔹) ⊩ C β ((δ c).F) (β c) ∷ 𝕆 :=
 begin
+  have dj : disjoint y𝕆 y𝔹,
+  { rw finset.disjoint_iff_ne,
+    intros a a_in_y𝕆 b b_in_y𝔹 h,
+    rw h at a_in_y𝕆,
+    let := y𝕆_𝕆 b a_in_y𝕆,
+    rw y𝔹_𝔹 b b_in_y𝔹 at this,
+    contradiction },
   rw finset.subset_iff at y𝕆_sub_FV,
   with_cases { induction idef : (δ c).F using rc_correctness.fn_body.rec_wf },
   case ret : x {
@@ -534,8 +541,32 @@ begin
       apply linear.ret,
       rw ←singleton_add,
       apply inductive_weakening,
-      apply linear.var }
-  }
+      apply linear.var },
+    { have : ¬(β c x = 𝕆 ∧ x ∉ ∅), 
+      { simp only [not_and], 
+        intro h,
+        rw y𝔹_𝔹 x wf_x_def at h, 
+        simp only [] at h, 
+        contradiction },
+      rw if_neg this,
+      apply linear.inc_b,
+      { apply mem_add.mpr,
+        apply or.inr,
+        apply mem_map.mpr,
+        use x,
+        exact ⟨wf_x_def, rfl⟩ },
+      have : y𝕆 = ∅,
+      { apply finset.eq_empty_of_forall_not_mem,
+        simp only [finset.insert_empty_eq_singleton, finset.mem_singleton] at y𝕆_sub_FV,
+        intros y y_in_y𝕆, 
+        have x_in_y𝕆, from (y𝕆_sub_FV y_in_y𝕆).subst y_in_y𝕆,
+        let := finset.disjoint_right.mp dj wf_x_def,
+        contradiction }, 
+      simp only [this, finset.empty_val, zero_add, map_zero],
+      apply linear.ret,
+      rw ←singleton_add,
+      apply inductive_weakening,
+      apply linear.var } },
 end
 
 theorem rc_insertion_correctness (β : const → var → lin_type) (δ : const → fn) (wf : β ⊢ δ) : β ⊩ C_prog β δ :=
@@ -613,6 +644,7 @@ begin
   simp only [add_assoc],
   apply linear_dec_o_vars _ (nodup_params δ c), 
   let y𝕆' := filter (λ (y : var), y ∈ FV (C β ((δ c).F) (β c))) y𝕆,
+  have y𝕆'_nd : nodup y𝕆', from nodup_filter _ nd_y𝕆,
   have y𝕆'_sub_y𝕆 : y𝕆' ⊆ y𝕆, from filter_subset y𝕆,
   have y𝕆'_sub_FV : y𝕆'.to_finset ⊆ FV (δ c).F,
   { rw finset.subset_iff, rw finset.subset_iff at y𝕆_sub_FV, rw subset_iff at y𝕆'_sub_y𝕆,
@@ -645,7 +677,8 @@ begin
       cases h,
       { exact or.inl (y𝕆'_sub_y𝕆 h) },
       { exact or.inr h } },
-    exact wf_FV_sandwich h1 h2 wf }
+    exact wf_FV_sandwich h1 h2 wf },
+  sorry
 end
 
 end rc_correctness

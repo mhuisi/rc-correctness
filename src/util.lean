@@ -753,6 +753,9 @@ namespace finset
     (a : α) (s : finset α) :
     ∃ l r : list α, sort p (insert a s) = l ++ a :: r :=
   list.mem_split ((mem_sort p).mpr (mem_insert_self a s))
+
+  lemma map_congr {α β : Type*} (f g : α ↪ β) {s : finset α} : (∀ x ∈ s, f.1 x = g.1 x) → map f s = map g s :=
+  λ h, eq_of_veq (multiset.map_congr h)
 end finset
 
 
