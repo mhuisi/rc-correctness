@@ -505,6 +505,7 @@ end
 
 theorem rc_insertion_correctness' {β : const → var → lin_type} {δ : const → fn} {c : const}
   {y𝕆 y𝔹 : finset var}
+  (p : pure_program δ)
   (y𝕆_𝕆 : ∀ y ∈ y𝕆, β c y = 𝕆) (y𝔹_𝔹 : ∀ y ∈ y𝔹, β c y = 𝔹)
   (y𝕆_sub_FV : y𝕆 ⊆ FV (δ c).F) (wf : β; δ; y𝕆 ∪ y𝔹 ⊢ (δ c).F)
   : β; (y𝕆.val {∶} 𝕆) + (y𝔹.val {∶} 𝔹) ⊩ C β ((δ c).F) (β c) ∷ 𝕆 :=
@@ -517,9 +518,12 @@ begin
     rw y𝔹_𝔹 b b_in_y𝔹 at this,
     contradiction },
   rw finset.subset_iff at y𝕆_sub_FV,
-  with_cases { induction idef : (δ c).F using rc_correctness.fn_body.rec_wf },
+  generalize h : (δ c).F = F,
+  have p' : pure_fn_body F, from h.subst (p c),
+  rw h at *,
+  clear h,
+  with_cases { induction F using rc_correctness.fn_body.rec_wf },
   case ret : x {
-    rw idef at *,
     unfold C,
     unfold FV at y𝕆_sub_FV,
     cases wf,
@@ -542,7 +546,7 @@ begin
       rw ←singleton_add,
       apply inductive_weakening,
       apply linear.var },
-    { have : ¬(β c x = 𝕆 ∧ x ∉ ∅), 
+    { have : ¬(β c x = 𝕆 ∧ x ∉ ∅), -- this one is causing issues
       { simp only [not_and], 
         intro h,
         rw y𝔹_𝔹 x wf_x_def at h, 
@@ -552,9 +556,7 @@ begin
       apply linear.inc_b,
       { apply mem_add.mpr,
         apply or.inr,
-        apply mem_map.mpr,
-        use x,
-        exact ⟨wf_x_def, rfl⟩ },
+        exact mem_map_of_mem _ wf_x_def },
       have : y𝕆 = ∅,
       { apply finset.eq_empty_of_forall_not_mem,
         simp only [finset.insert_empty_eq_singleton, finset.mem_singleton] at y𝕆_sub_FV,
@@ -566,10 +568,20 @@ begin
       apply linear.ret,
       rw ←singleton_add,
       apply inductive_weakening,
-      apply linear.var } },
+      apply linear.var } 
+  },
+  sorry, sorry,
+  case «inc» : x F ih {
+    simp only [pure_fn_body, pure_fn_body', bool.to_bool_false, bool.coe_sort_ff] at p',
+    contradiction
+  },
+  case «dec» : x F ih {
+    simp only [pure_fn_body, pure_fn_body', bool.to_bool_false, bool.coe_sort_ff] at p',
+    contradiction
+  }
 end
 
-theorem rc_insertion_correctness (β : const → var → lin_type) (δ : const → fn) (wf : β ⊢ δ) : β ⊩ C_prog β δ :=
+theorem rc_insertion_correctness (β : const → var → lin_type) (δ : const → fn) (p : pure_program δ) (wf : β ⊢ δ) : β ⊩ C_prog β δ :=
 begin
   cases wf,
   split,
@@ -609,7 +621,7 @@ begin
       cases β c y; 
       simp only [or_false, false_or] },
     simp only [@filter_congr _ _ _ _ _ ↑ys this, filter_true] },
-  have Γ_subdiv : ↑(list.map (λ (y : var), y ∶ β c y) ys) = (y𝕆 {∶} 𝕆) + (y𝔹 {∶} 𝔹),
+  have Γ_subdiv : ↑(list.map (λ (y : var), y ∶ β c y) ys) = (y𝕆 {∶} 𝕆) + (y𝔹 {∶} 𝔹), -- this one is causing issues
   { have : ↑(list.map (λ (y : var), y ∶ β c y) ys) = map (λ (y : var), y ∶ β c y) ↑ys, 
       from rfl,
     rw this,
@@ -644,7 +656,11 @@ begin
   simp only [add_assoc],
   apply linear_dec_o_vars _ (nodup_params δ c), 
   let y𝕆' := filter (λ (y : var), y ∈ FV (C β ((δ c).F) (β c))) y𝕆,
-  have y𝕆'_nd : nodup y𝕆', from nodup_filter _ nd_y𝕆,
+  have y𝕆'_𝕆 : ∀ y ∈ y𝕆', β c y = 𝕆,
+  { simp only [and_imp, mem_filter, mem_coe], 
+    intros y y_in_ys y_𝕆 y_in_FV,
+    assumption },
+  have nd_y𝕆' : nodup y𝕆', from nodup_filter _ nd_y𝕆,
   have y𝕆'_sub_y𝕆 : y𝕆' ⊆ y𝕆, from filter_subset y𝕆,
   have y𝕆'_sub_FV : y𝕆'.to_finset ⊆ FV (δ c).F,
   { rw finset.subset_iff, rw finset.subset_iff at y𝕆_sub_FV, rw subset_iff at y𝕆'_sub_y𝕆,
@@ -678,7 +694,12 @@ begin
       { exact or.inl (y𝕆'_sub_y𝕆 h) },
       { exact or.inr h } },
     exact wf_FV_sandwich h1 h2 wf },
-  sorry
+  rw ←(to_finset_eq nd_y𝕆') at y𝕆'_sub_FV wf',
+  rw ←(to_finset_eq nd_y𝔹) at wf',
+  replace y𝕆'_𝕆 := λ y y_in_y𝕆', y𝕆'_𝕆 y ((@finset.mem_mk _ _ _ nd_y𝕆').mp y_in_y𝕆'),
+  replace y𝔹_𝔹 := λ y y_in_y𝔹, y𝔹_𝔹 y ((@finset.mem_mk _ _ _ nd_y𝔹).mp y_in_y𝔹),
+  exact @rc_insertion_correctness' β δ c {val := y𝕆', nodup := nd_y𝕆'} {val := y𝔹, nodup := nd_y𝔹}
+    p y𝕆'_𝕆 y𝔹_𝔹 y𝕆'_sub_FV wf'
 end
 
 end rc_correctness
