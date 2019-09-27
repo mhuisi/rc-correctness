@@ -503,21 +503,24 @@ begin
   assumption
 end
 
+--set_option pp.all true
+
 theorem rc_insertion_correctness' {β : const → var → lin_type} {δ : const → fn} {c : const}
-  {y𝕆 y𝔹 : finset var}
+  {y𝕆 y𝔹 : multiset var}
   (p : pure_program δ)
+  (nd_y𝕆 : nodup y𝕆) (nd_y𝔹 : nodup y𝔹)
   (y𝕆_𝕆 : ∀ y ∈ y𝕆, β c y = 𝕆) (y𝔹_𝔹 : ∀ y ∈ y𝔹, β c y = 𝔹)
-  (y𝕆_sub_FV : y𝕆 ⊆ FV (δ c).F) (wf : β; δ; y𝕆 ∪ y𝔹 ⊢ (δ c).F)
-  : β; (y𝕆.val {∶} 𝕆) + (y𝔹.val {∶} 𝔹) ⊩ C β ((δ c).F) (β c) ∷ 𝕆 :=
+  (y𝕆_sub_FV : y𝕆.to_finset ⊆ FV (δ c).F) (wf : β; δ; y𝕆.to_finset ∪ y𝔹.to_finset ⊢ (δ c).F)
+  : β; (y𝕆 {∶} 𝕆) + (y𝔹 {∶} 𝔹) ⊩ C β ((δ c).F) (β c) ∷ 𝕆 :=
 begin
-  have dj : disjoint y𝕆 y𝔹,
-  { rw finset.disjoint_iff_ne,
+  have dj : multiset.disjoint y𝕆 y𝔹,
+  { rw disjoint_iff_ne,
     intros a a_in_y𝕆 b b_in_y𝔹 h,
     rw h at a_in_y𝕆,
     let := y𝕆_𝕆 b a_in_y𝕆,
     rw y𝔹_𝔹 b b_in_y𝔹 at this,
     contradiction },
-  rw finset.subset_iff at y𝕆_sub_FV,
+  simp only [finset.subset_iff, mem_to_finset] at y𝕆_sub_FV,
   generalize h : (δ c).F = F,
   have p' : pure_fn_body F, from h.subst (p c),
   rw h at *,
@@ -527,18 +530,18 @@ begin
     unfold C,
     unfold FV at y𝕆_sub_FV,
     cases wf,
-    simp only [mem_ndunion, finset.mem_mk] at wf_x_def,
+    simp only [mem_union, ndunion_eq_union, to_finset_val, nodup_erase_dup, mem_erase_dup, finset.mem_mk] at wf_x_def,
     unfold inc_𝕆,
     cases wf_x_def,
-    { have : β c x = 𝕆 ∧ x ∉ ∅, from ⟨y𝕆_𝕆 x wf_x_def, finset.not_mem_empty x⟩,
+    { have : β c x = 𝕆 ∧ x ∉ finset.empty, from ⟨y𝕆_𝕆 x wf_x_def, finset.not_mem_empty x⟩,
       rw if_pos this,
-      have : y𝕆 = {x},
-      { ext, 
+      have : y𝕆 = x :: 0,
+      { rw nodup_ext nd_y𝕆 (nodup_singleton x),
+        intro a,
         split;
         intro h,
         { exact y𝕆_sub_FV h },
-        { rwa ←finset.mem_def at wf_x_def,
-          simp only [finset.insert_empty_eq_singleton, finset.mem_singleton] at h,
+        { rw mem_singleton at h,
           rwa h } },
       rw this,
       simp only [finset.singleton_val, finset.insert_empty_eq_singleton, zero_add, map_cons, cons_add, map_zero],
@@ -546,7 +549,7 @@ begin
       rw ←singleton_add,
       apply inductive_weakening,
       apply linear.var },
-    { have : ¬(β c x = 𝕆 ∧ x ∉ ∅), -- this one is causing issues
+    { have : ¬(β c x = 𝕆 ∧ x ∉ finset.empty), -- this one is causing issues
       { simp only [not_and], 
         intro h,
         rw y𝔹_𝔹 x wf_x_def at h, 
@@ -558,19 +561,37 @@ begin
         apply or.inr,
         exact mem_map_of_mem _ wf_x_def },
       have : y𝕆 = ∅,
-      { apply finset.eq_empty_of_forall_not_mem,
+      { apply eq_zero_of_forall_not_mem,
         simp only [finset.insert_empty_eq_singleton, finset.mem_singleton] at y𝕆_sub_FV,
         intros y y_in_y𝕆, 
         have x_in_y𝕆, from (y𝕆_sub_FV y_in_y𝕆).subst y_in_y𝕆,
-        let := finset.disjoint_right.mp dj wf_x_def,
+        let := disjoint_right.mp dj wf_x_def,
         contradiction }, 
-      simp only [this, finset.empty_val, zero_add, map_zero],
+      simp only [this, empty_eq_zero, zero_add, map_zero],
       apply linear.ret,
       rw ←singleton_add,
       apply inductive_weakening,
       apply linear.var } 
   },
-  sorry, sorry,
+  case «let» : x e F ih {
+    sorry
+  },
+  case «case» : x Fs ih {
+    unfold C,
+    cases wf,
+    simp only [mem_union, ndunion_eq_union, to_finset_val, nodup_erase_dup, mem_erase_dup, finset.mem_mk] at wf_x_def,
+    cases wf_x_def,
+    { apply linear.case_o, 
+      { simpa },
+      intros F' h,
+      rw list.map_wf_eq_map at h, 
+      rw list.mem_map at h,
+      rcases h with ⟨F, ⟨F_in_Fs, F'_def⟩⟩, 
+      rw ←F'_def,
+      apply linear_dec_o_vars,
+      }
+    
+  },
   case «inc» : x F ih {
     simp only [pure_fn_body, pure_fn_body', bool.to_bool_false, bool.coe_sort_ff] at p',
     contradiction
@@ -580,6 +601,8 @@ begin
     contradiction
   }
 end
+
+--set_option pp.all true
 
 theorem rc_insertion_correctness (β : const → var → lin_type) (δ : const → fn) (p : pure_program δ) (wf : β ⊢ δ) : β ⊩ C_prog β δ :=
 begin
@@ -608,7 +631,12 @@ begin
   obtain ⟨nd_y𝕆, nd_y𝔹⟩ : multiset.nodup y𝕆 ∧ multiset.nodup y𝔹,
   { split; exact nodup_filter _ (coe_nodup.mpr (nodup_params δ c)) },
   have ys_subdiv : ↑ys = y𝕆 + y𝔹,
-  { rw filter_add_filter,
+  { have : ∀ y ∈ (↑ys : multiset var), β c y = 𝔹 ↔ β c y ≠ 𝕆, 
+    { intros y y_in_ys,
+      split; intro h; cases β c y; simp at h ⊢; assumption },
+    rw @filter_congr var (λ (y : var), β c y = 𝔹) (λ (y : var), β c y ≠ 𝕆) _ _ ↑ys this, -- state of the refactor
+    -- simp only [@filter_congr var (λ (y : var), β c y = 𝔹) (λ (y : var), β c y ≠ 𝕆) _ _ ↑ys this],
+    rw filter_add_filter,
     have : ∀ y ∈ ↑ys, β c y = 𝕆 ∧ β c y = 𝔹 ↔ false,
     { simp only [not_and, iff_false],
       intros y y_in_ys h,
@@ -621,7 +649,7 @@ begin
       cases β c y; 
       simp only [or_false, false_or] },
     simp only [@filter_congr _ _ _ _ _ ↑ys this, filter_true] },
-  have Γ_subdiv : ↑(list.map (λ (y : var), y ∶ β c y) ys) = (y𝕆 {∶} 𝕆) + (y𝔹 {∶} 𝔹), -- this one is causing issues
+  have Γ_subdiv : ↑(list.map (λ (y : var), y ∶ β c y) ys) = (y𝕆 {∶} 𝕆) + (y𝔹 {∶} 𝔹),
   { have : ↑(list.map (λ (y : var), y ∶ β c y) ys) = map (λ (y : var), y ∶ β c y) ↑ys, 
       from rfl,
     rw this,
@@ -694,12 +722,10 @@ begin
       { exact or.inl (y𝕆'_sub_y𝕆 h) },
       { exact or.inr h } },
     exact wf_FV_sandwich h1 h2 wf },
-  rw ←(to_finset_eq nd_y𝕆') at y𝕆'_sub_FV wf',
-  rw ←(to_finset_eq nd_y𝔹) at wf',
   replace y𝕆'_𝕆 := λ y y_in_y𝕆', y𝕆'_𝕆 y ((@finset.mem_mk _ _ _ nd_y𝕆').mp y_in_y𝕆'),
   replace y𝔹_𝔹 := λ y y_in_y𝔹, y𝔹_𝔹 y ((@finset.mem_mk _ _ _ nd_y𝔹).mp y_in_y𝔹),
-  exact @rc_insertion_correctness' β δ c {val := y𝕆', nodup := nd_y𝕆'} {val := y𝔹, nodup := nd_y𝔹}
-    p y𝕆'_𝕆 y𝔹_𝔹 y𝕆'_sub_FV wf'
+  exact rc_insertion_correctness'
+    p nd_y𝕆' nd_y𝔹 y𝕆'_𝕆 y𝔹_𝔹 y𝕆'_sub_FV wf'
 end
 
 end rc_correctness

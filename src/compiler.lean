@@ -29,7 +29,7 @@ def C_app : list (var × lin_type) → fn_body → (var → lin_type) → fn_bod
 | xs F βₗ := F
 
 def C (β : const → var → lin_type) : fn_body → (var → lin_type) → fn_body
-| (ret x) βₗ := inc_𝕆 x ∅ (ret x) βₗ
+| (ret x) βₗ := inc_𝕆 x finset.empty (ret x) βₗ
 | (case x of Fs) βₗ :=
   case x of Fs.map_wf (λ F h, dec_𝕆 ((FV (case x of Fs)).sort var_le) (C F βₗ) βₗ)
 | (y ≔ x[i]; F) βₗ := 
