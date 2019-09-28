@@ -35,12 +35,6 @@ notation Γ ` ⊢ `:1 F := fn_body_wf Γ F
 | «case» {Γ : finset var} {x : var} {Fs : list fn_body}
   (x_def : x ∈ Γ) (Fs_wf : ∀ F ∈ Fs, Γ ⊢ F) :
   Γ ⊢ (case x of Fs)
-| «inc» {Γ : finset var} {x : var} {F : fn_body}
-  (x_def : x ∈ Γ) (F_wf : Γ ⊢ F) :
-  Γ ⊢ inc x; F
-| «dec» {Γ : finset var} {x : var} {F : fn_body}
-  (x_def : x ∈ Γ) (F_wf : Γ ⊢ F) :
-  Γ ⊢ dec x; F
 
 notation β `; ` δ `; ` Γ ` ⊢ `:1 F := fn_body_wf β δ Γ F
 

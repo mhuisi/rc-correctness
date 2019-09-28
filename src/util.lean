@@ -26,7 +26,6 @@ namespace list
   lemma map_wf_eq_map {α β : Type*} [has_sizeof α] {xs : list α} {f : α → β} : map_wf xs (λ a _, f a) = map f xs :=
   by simp only [map_wf, attach, map_pmap, pmap_eq_map]
 
-
   lemma sizeof_filter_le_sizeof {α : Type*} (p : α → Prop) [decidable_pred p] (xs : list α) : list.sizeof (filter p xs) <= list.sizeof xs :=
   begin
     induction xs,
@@ -38,6 +37,18 @@ namespace list
     { rw filter_cons_of_neg xs_tl h,
       unfold_sizeof,
       exact le_add_left xs_ih }
+  end
+
+  lemma all_map_bool_iff_all {α : Type*} (p : α → bool) (xs : list α) : list.all (list.map p xs) id ↔ list.all xs p :=
+  begin
+    simp only [all_iff_forall, and_imp, id.def, mem_map, exists_imp_distrib],
+    split;
+    intro h,
+    { intros a a_in_xs,
+      cases h' : p a;
+      exact h _ a a_in_xs h' },
+    intros b a a_in_xs h',
+    exact h'.subst (h a a_in_xs)
   end
   
   def group {α : Type*} [p : setoid α] [decidable_rel p.r] : list α → list (list α) 

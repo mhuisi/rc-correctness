@@ -88,21 +88,6 @@ def FV : fn_body → finset var
 | (dec x; F) := insert x (FV F)
 
 
--- purity
-def pure_fn_body' : fn_body → bool 
-| (ret x) := true
-| (x ≔ e; F) := pure_fn_body' F
-| (case x of Fs) := list.all (Fs.map_wf (λ F h, pure_fn_body' F)) id
-| (inc x; F) := false
-| (dec x; F) := false
-
-def pure_fn_body (F : fn_body) : Prop := pure_fn_body' F
-
-def pure_fn (f : fn) : Prop := pure_fn_body f.F
-
-def pure_program (δ : const → fn) : Prop := ∀ c, pure_fn (δ c)
-
-
 -- var order
 local attribute [reducible] var
 abbreviation var_le : var → var → Prop := nat.le
