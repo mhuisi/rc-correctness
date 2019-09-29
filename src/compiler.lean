@@ -34,17 +34,17 @@ def C (β : const → var → lin_type) : fn_body → (var → lin_type) → fn_
   case x of Fs.map_wf (λ F h, dec_𝕆 ((FV (case x of Fs)).sort var_le) (C F βₗ) βₗ)
 | (y ≔ x[i]; F) βₗ := 
   if βₗ x = 𝕆 then
-    y ≔ x[i]; inc y; dec_𝕆_var x (C F βₗ) βₗ
+    y ≔ x[i]; inc y; dec_𝕆_var x (C F (βₗ[y ↦ 𝕆])) βₗ
   else
     y ≔ x[i]; C F (βₗ[y ↦ 𝔹])
 | (z ≔ c⟦ys…⟧; F) βₗ := 
-  C_app (ys.map (λ y, ⟨y, β c y⟩)) (z ≔ c⟦ys…⟧; C F βₗ) βₗ
+  C_app (ys.map (λ y, ⟨y, β c y⟩)) (z ≔ c⟦ys…⟧; C F (βₗ[z ↦ 𝕆])) βₗ
 | (z ≔ c⟦ys…, _⟧; F) βₗ := 
-  C_app (ys.map (λ y, ⟨y, β c y⟩)) (z ≔ c⟦ys…, _⟧; C F βₗ) βₗ
+  C_app (ys.map (λ y, ⟨y, β c y⟩)) (z ≔ c⟦ys…, _⟧; C F (βₗ[z ↦ 𝕆])) βₗ
 | (z ≔ x⟦y⟧; F) βₗ := 
-  C_app ([⟨x, 𝕆⟩, ⟨y, 𝕆⟩]) (z ≔ x⟦y⟧; C F βₗ) βₗ   
+  C_app ([⟨x, 𝕆⟩, ⟨y, 𝕆⟩]) (z ≔ x⟦y⟧; C F (βₗ[z ↦ 𝕆])) βₗ   
 | (z ≔ ⟪ys⟫i; F) βₗ :=
-  C_app (ys.map (λ y, ⟨y, 𝕆⟩)) (z ≔ ⟪ys⟫i; C F βₗ) βₗ
+  C_app (ys.map (λ y, ⟨y, 𝕆⟩)) (z ≔ ⟪ys⟫i; C F (βₗ[z ↦ 𝕆])) βₗ
 | F βₗ := F
 
 def C_prog (β : const → var → lin_type) (δ : const → fn) (c : const) : fn := 
