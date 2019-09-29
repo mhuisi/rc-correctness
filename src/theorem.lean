@@ -452,7 +452,7 @@ open multiset (hiding coe_sort)
 
 axiom nodup_params (δ : const → fn) (c : const) : list.nodup (δ c).ys
 
-lemma inductive_dec {β : const → var → lin_type} {ys : list var} {y𝕆 y𝔹 : multiset var} {F : fn_body} {βₗ : var → lin_type}
+lemma inductive_dec' {β : const → var → lin_type} {ys : list var} {y𝕆 y𝔹 : multiset var} {F : fn_body} {βₗ : var → lin_type}
   (ys_sub_vars : ↑ys ⊆ y𝕆 + y𝔹) (d : list.nodup ys)
   (y𝕆_𝕆 : ∀ y ∈ y𝕆, βₗ y = 𝕆) (y𝔹_𝔹 : ∀ y ∈ y𝔹, βₗ y = 𝔹) (nd_y𝕆 : nodup y𝕆) (nd_y𝔹 : nodup y𝔹)
   (h : β; (filter (λ y, y ∉ ys ∨ y ∈ FV F) y𝕆 {∶} 𝕆) + (y𝔹 {∶} 𝔹) ⊩ F ∷ 𝕆)
@@ -536,6 +536,23 @@ begin
         exact or.inr h_1 },
       { exact or.inl ⟨h'', h'⟩ } },
     rwa filter_congr (h_congr this) at h }
+end
+
+lemma inductive_dec {β : const → var → lin_type} {ys : list var} {y𝕆 y𝔹 : multiset var} {F : fn_body} {βₗ : var → lin_type}
+  (y𝕆_sub_ys : y𝕆 ⊆ ↑ys) (ys_sub_vars : ↑ys ⊆ y𝕆 + y𝔹) (d : list.nodup ys)
+  (y𝕆_𝕆 : ∀ y ∈ y𝕆, βₗ y = 𝕆) (y𝔹_𝔹 : ∀ y ∈ y𝔹, βₗ y = 𝔹) (nd_y𝕆 : nodup y𝕆) (nd_y𝔹 : nodup y𝔹)
+  (h : β; (filter (λ y, y ∈ FV F) y𝕆 {∶} 𝕆) + (y𝔹 {∶} 𝔹) ⊩ F ∷ 𝕆)
+  : β; (y𝕆 {∶} 𝕆) + (y𝔹 {∶} 𝔹) ⊩ dec_𝕆 ys F βₗ ∷ 𝕆 :=
+begin
+  have : ∀ y ∈ y𝕆, y ∈ FV F ↔ y ∉ ys ∨ y ∈ FV F,
+  { intros y y_in_y𝕆,
+    split; intro h',
+    { exact or.inr h' },
+    { cases h', 
+      { exact absurd (y𝕆_sub_ys y_in_y𝕆) h' },
+      { assumption } } },
+  rw filter_congr this at h,
+  exact inductive_dec' ys_sub_vars d y𝕆_𝕆 y𝔹_𝔹 nd_y𝕆 nd_y𝔹 h
 end
 
 lemma inductive_weakening {β : const → var → lin_type} {ys : multiset typed_var} {y𝔹 : multiset var} 
@@ -645,13 +662,13 @@ begin
       rw ←F'_def,
       apply inductive_dec,
       any_goals { assumption },
+      { rw subset_iff,
+        rw finset.sort_eq,
+        intros y y_in_y𝕆,
+        exact y𝕆_sub_FV y_in_y𝕆 },
       { simp only [finset.sort_eq],
         assumption },
       { exact finset.sort_nodup var_le (FV (case x of Fs)) },
-      have : ∀ y ∈ y𝕆, 
-        y ∉ finset.sort var_le (FV (case x of Fs)) ∨ y ∈ FV (C β F (β c)) ↔ y ∉ FV (case x of Fs) ∨ y ∈ FV (C β F (β c)),
-      { simp only [iff_self, finset.mem_sort, forall_true_iff] },
-      rw filter_congr this,
       apply ih,
       any_goals { assumption },
       { apply nodup_filter, 
@@ -659,7 +676,7 @@ begin
       { simp only [and_imp, mem_filter, finset.mem_sort],
         intros y y_in_y𝕆 h,
         exact y𝕆_𝕆 y y_in_y𝕆 },
-      { have : filter (λ (y : var), y ∉ FV (case x of Fs) ∨ y ∈ FV (C β F (β c))) y𝕆 ⊆ y𝕆, from filter_subset y𝕆,
+      { have : filter (λ (y : var), y ∈ FV (C β F (β c))) y𝕆 ⊆ y𝕆, from filter_subset y𝕆,
         apply disjoint_of_subset_left this,
         assumption },
       { have wf, from wf_Fs_wf F F_in_Fs,
@@ -677,9 +694,7 @@ begin
           { use FV F, apply and.intro _ y_in_FV, use F, exact ⟨F_in_Fs, rfl⟩ },
           have : y ∈ y𝕆 ∨ y ∈ y𝔹, from FV_sub_y𝕆_y𝔹 (or.inr this),
           cases this,
-          { apply or.inr,
-            apply and.intro this_1 _,
-            exact or.inr y_in_FV },
+          { exact or.inr ⟨this_1, y_in_FV⟩ },
           { exact or.inl this_1 } },
         { rw finset.subset_iff,
           simp only [mem_union, ndunion_eq_union, mem_filter, to_finset_val,
@@ -688,11 +703,7 @@ begin
           cases h,
           { exact or.inl (h.left) },
           { exact or.inr h } } },
-      { simp only [and_imp, mem_filter],
-        intros y y_in_y𝕆 h,
-        cases h,
-        { exact absurd (y𝕆_sub_FV y_in_y𝕆) h },
-        { rwa FV_C_eq_FV at h } } 
+      { simp only [and_imp, mem_filter, FV_C_eq_FV, imp_self, forall_true_iff] } 
     }
   },
   case «inc» : x F ih {
@@ -756,14 +767,7 @@ begin
   unfold list.to_finset at wf,
   rw ys_subdiv at wf,
   have : ↑ys ⊆ y𝕆 + y𝔹, { rw ys_subdiv, exact subset.refl _ },
-  apply inductive_dec this (nodup_params δ c) y𝕆_𝕆 y𝔹_𝔹 nd_y𝕆 nd_y𝔹, 
-  have : ∀ y ∈ y𝕆, y ∉ ys ∨ y ∈ FV (C β ((δ c).F) (β c)) ↔ y ∈ FV (C β ((δ c).F) (β c)),
-  { intros y y_in_y𝕆, split; intro h, 
-    { cases h, 
-      { exact absurd (mem_coe.mp (subset_iff.mp y𝕆_sub_ys y_in_y𝕆)) h }, 
-      { assumption } },
-    { exact or.inr h } },
-  rw filter_congr this,
+  apply inductive_dec y𝕆_sub_ys this (nodup_params δ c) y𝕆_𝕆 y𝔹_𝔹 nd_y𝕆 nd_y𝔹, 
   let y𝕆' := filter (λ (y : var), y ∈ FV (C β ((δ c).F) (β c))) y𝕆,
   have y𝕆'_𝕆 : ∀ y ∈ y𝕆', β c y = 𝕆,
   { simp only [and_imp, mem_filter, mem_coe], 
