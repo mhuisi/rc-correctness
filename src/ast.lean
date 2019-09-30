@@ -24,11 +24,8 @@ inductive fn_body : Type
 structure fn := (ys : list var) (F : fn_body)
 
 inductive rc : Type
-| var (x : var) : rc
-| const (c : const) : rc
 | expr (e : expr) : rc
 | fn_body (F : fn_body) : rc
-| fn (f : fn) : rc
 
 
 -- notation
@@ -49,11 +46,8 @@ notation `inc ` x `; ` F := fn_body.inc x F
 notation `dec ` x `; ` F := fn_body.dec x F
 
 -- rc
-instance var_to_rc : has_coe var rc := ⟨rc.var⟩ 
-instance const_to_rc : has_coe var rc := ⟨rc.const⟩ 
 instance expr_to_rc : has_coe expr rc := ⟨rc.expr⟩ 
 instance fn_body_to_rc : has_coe fn_body rc := ⟨rc.fn_body⟩
-instance fn_to_rc : has_coe fn rc := ⟨rc.fn⟩ 
 
 
 -- fn_body recursor, courtesy of Sebastian Ullrich

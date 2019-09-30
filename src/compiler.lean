@@ -22,8 +22,7 @@ def C_app : list (var × lin_type) → fn_body → (var → lin_type) → fn_bod
 | [] (z ≔ e; F) βₗ := z ≔ e; F
 | ((y, t)::xs) (z ≔ e; F) βₗ := 
   if t = 𝕆 then
-    let ys := xs.map (λ ⟨x, b⟩, x) in 
-      inc_𝕆 y (ys.to_finset ∪ FV F) (C_app xs (z ≔ e; F) βₗ) βₗ
+    inc_𝕆 y ((xs.map prod.fst).to_finset ∪ FV F) (C_app xs (z ≔ e; F) βₗ) βₗ
   else
     C_app xs (z ≔ e; dec_𝕆_var y F βₗ) βₗ
 | xs F βₗ := F

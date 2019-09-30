@@ -24,35 +24,31 @@ open rc_correctness.lin_type
 
 inductive linear (β : const → var → lin_type) : type_context → typed_rc → Prop
 notation Γ ` ⊩ `:1 t := linear Γ t
-| var (x : var) (τ : lin_type) : 
-  (x ∶ τ)::0 ⊩ x ∷ τ
 | weaken {Γ : type_context} {t : typed_rc} (x : var) 
   (t_typed : Γ ⊩ t) :
   (x ∶ 𝔹) :: Γ ⊩ t
 | contract {Γ : type_context} {x : var} {t : typed_rc}
   (x_𝔹 : (x ∶ 𝔹) ∈ Γ) (t_typed : (x ∶ 𝔹) :: Γ ⊩ t) :
   Γ ⊩ t
-| inc_o {Γ : type_context} {x : var} {F : fn_body}
+| inc_𝕆 {Γ : type_context} {x : var} {F : fn_body}
   (x_𝕆 : (x ∶ 𝕆) ∈ Γ) (F_𝕆 : (x ∶ 𝕆) :: Γ ⊩ F ∷ 𝕆) :
   Γ ⊩ (inc x; F) ∷ 𝕆
-| inc_b {Γ : type_context} {x : var} {F : fn_body}
+| inc_𝔹 {Γ : type_context} {x : var} {F : fn_body}
   (x_𝔹 : (x ∶ 𝔹) ∈ Γ) (F_𝕆 : (x ∶ 𝕆) :: Γ ⊩ F ∷ 𝕆) :
   Γ ⊩ (inc x; F) ∷ 𝕆
 | «dec» {Γ : type_context} (x : var) {F : fn_body}
   (F_𝕆 : Γ ⊩ F ∷ 𝕆) :
   (x ∶ 𝕆) :: Γ ⊩ (dec x; F) ∷ 𝕆
-| ret {Γ : type_context} {x : var}
-  (x_𝕆 : Γ ⊩ x ∷ 𝕆) :
-  Γ ⊩ (ret x) ∷ 𝕆
-| case_o {Γ : type_context} {x : var} {Fs : list fn_body}
+| ret {x : var} :
+  (x ∶ 𝕆) :: 0 ⊩ (ret x) ∷ 𝕆
+| case_𝕆 {Γ : type_context} {x : var} {Fs : list fn_body}
   (x_𝕆 : (x ∶ 𝕆) ∈ Γ) (Fs_𝕆 : ∀ F ∈ Fs, Γ ⊩ ↑F ∷ 𝕆) :
   Γ ⊩ (case x of Fs) ∷ 𝕆
-| case_b {Γ : type_context} {x : var} {Fs : list fn_body}
+| case_𝔹 {Γ : type_context} {x : var} {Fs : list fn_body}
   (x_𝔹 : (x ∶ 𝔹) ∈ Γ) (Fs_𝕆 : ∀ F ∈ Fs, Γ ⊩ ↑F ∷ 𝕆) :
   Γ ⊩ (case x of Fs) ∷ 𝕆
-| const_app_full {Γys : list (type_context × var)} {c : const}
-  (ys_β_c : ∀ Γy ∈ Γys, (Γy : type_context × var).1 ⊩ Γy.2 ∷ β c Γy.2) :
-  multiset.join (Γys.map prod.fst) ⊩ c⟦Γys.map prod.snd…⟧ ∷ 𝕆
+| const_app_full (ys : list var) (c : const) :
+  list.map (λ y, y ∶ β c y) ys ⊩ c⟦ys…⟧ ∷ 𝕆
 | const_app_part (ys : list var) (c : const) :
   ys [∶] 𝕆 ⊩ c⟦ys…, _⟧ ∷ 𝕆
 | var_app (x y : var) :
@@ -62,10 +58,10 @@ notation Γ ` ⊩ `:1 t := linear Γ t
 | «let» {Γ : type_context} {xs : list var} {e : expr} {Δ : type_context} {z : var} {F : fn_body}
   (xs_𝕆 : (xs [∶] 𝕆) ⊆ Δ) (e_𝕆 : Γ + (xs [∶] 𝔹) ⊩ e ∷ 𝕆) (F_𝕆 : (z ∶ 𝕆) :: Δ ⊩ F ∷ 𝕆) :
   Γ + Δ ⊩ (z ≔ e; F) ∷ 𝕆
-| proj_bor {Γ : type_context} {x y : var} {F : fn_body} (i : cnstr)
+| proj_𝔹 {Γ : type_context} {x y : var} {F : fn_body} (i : cnstr)
   (x_𝔹 : (x ∶ 𝔹) ∈ Γ) (F_𝕆 : (y ∶ 𝔹) :: Γ ⊩ F ∷ 𝕆) :
   Γ ⊩ (y ≔ x[i]; F) ∷ 𝕆
-| proj_own {Γ : type_context} {x y : var} {F : fn_body} (i : cnstr)
+| proj_𝕆 {Γ : type_context} {x y : var} {F : fn_body} (i : cnstr)
   (x_𝕆 : (x ∶ 𝕆) ∈ Γ) (F_𝕆 : (y ∶ 𝕆) :: Γ ⊩ F ∷ 𝕆) :
   Γ ⊩ (y ≔ x[i]; inc y; F) ∷ 𝕆
 
