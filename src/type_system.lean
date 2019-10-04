@@ -67,7 +67,7 @@ notation Γ ` ⊩ `:1 t := linear Γ t
 
 notation β `; ` Γ ` ⊩ `:1 t := linear β Γ t
 
-inductive linear_const (β : const → var → lin_type) (δ : const → fn) : const → Prop
+inductive linear_const (β : const → var → lin_type) (δ : program) : const → Prop
 notation ` ⊩ `:1 c := linear_const c
 | const {c : const}
   (F_𝕆 : β; (δ c).ys.map (λ y, y ∶ β c y) ⊩ (δ c).F ∷ 𝕆) :
@@ -75,9 +75,9 @@ notation ` ⊩ `:1 c := linear_const c
 
 notation β `; ` δ ` ⊩ `:1 c := linear_const β δ c
 
-inductive linear_program (β : const → var → lin_type) : (const → fn) → Prop
+inductive linear_program (β : const → var → lin_type) : program → Prop
 notation ` ⊩ `:1 δ := linear_program δ
-| program {δ : const → fn}
+| program {δ : program}
   (const_typed : ∀ c : const, (β; δ ⊩ c)) :
   ⊩ δ
 

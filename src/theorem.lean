@@ -23,7 +23,7 @@ section FV_wf
   open finset
   open list
 
-  theorem FV_subset_finset_var {δ : const → fn} {β : const → var → lin_type} {Γ : finset var} {F : fn_body} 
+  theorem FV_subset_finset_var {δ : program} {β : const → var → lin_type} {Γ : finset var} {F : fn_body} 
     (h : β; δ; Γ ⊢ F) : 
     FV F ⊆ Γ :=
   begin
@@ -287,7 +287,7 @@ end FV_C
 section sandwich
   open finset
 
-  lemma wf_sandwich {β : const → var → lin_type} {δ : const → fn} {Γ Γ' Γ'' : finset var} {F : fn_body} 
+  lemma wf_sandwich {β : const → var → lin_type} {δ : program} {Γ Γ' Γ'' : finset var} {F : fn_body} 
     (Γ_sub_Γ' : Γ ⊆ Γ') (Γ'_sub_Γ'' : Γ' ⊆ Γ'') (hΓ : β; δ; Γ ⊢ F) (hΓ'' : β; δ; Γ'' ⊢ F)
     : β; δ; Γ' ⊢ F :=
   begin
@@ -340,7 +340,7 @@ section sandwich
     }
   end
 
-  lemma FV_wf {β : const → var → lin_type} {δ : const → fn} {Γ : finset var} {F : fn_body} (h : β; δ; Γ ⊢ F)
+  lemma FV_wf {β : const → var → lin_type} {δ : program} {Γ : finset var} {F : fn_body} (h : β; δ; Γ ⊢ F)
     : β; δ; FV F ⊢ F :=
   begin
     induction h,
@@ -410,7 +410,7 @@ section sandwich
         exact subset_iff.mp (FV_subset_finset_var (h_Fs_wf a a_in_Fs)) x_in_S } }
   end
 
-  lemma wf_FV_sandwich {β : const → var → lin_type} {δ : const → fn} {Γ Γ' : finset var} {F : fn_body} 
+  lemma wf_FV_sandwich {β : const → var → lin_type} {δ : program} {Γ Γ' : finset var} {F : fn_body} 
     (Γ'_low : FV F ⊆ Γ') (Γ'_high : Γ' ⊆ Γ) (h : β; δ; Γ ⊢ F)
     : β; δ; Γ' ⊢ F := wf_sandwich Γ'_low Γ'_high (FV_wf h) h
 end sandwich
@@ -450,7 +450,7 @@ end
 
 open multiset (hiding coe_sort)
 
-axiom nodup_params (δ : const → fn) (c : const) : list.nodup (δ c).ys
+axiom nodup_params (δ : program) (c : const) : list.nodup (δ c).ys
 
 lemma inductive_dec' {β : const → var → lin_type} {ys : list var} {y𝕆 y𝔹 : multiset var} {F : fn_body} {βₗ : var → lin_type}
   (ys_sub_vars : ↑ys ⊆ y𝕆 + y𝔹) (d : list.nodup ys)
@@ -569,7 +569,7 @@ begin
   assumption
 end
 
-theorem rc_insertion_correctness' {β : const → var → lin_type} {δ : const → fn} {c : const}
+theorem rc_insertion_correctness' {β : const → var → lin_type} {δ : program} {c : const}
   {y𝕆 y𝔹 : multiset var}
   (nd_y𝕆 : nodup y𝕆) (nd_y𝔹 : nodup y𝔹)
   (y𝕆_𝕆 : ∀ y ∈ y𝕆, β c y = 𝕆) (y𝔹_𝔹 : ∀ y ∈ y𝔹, β c y = 𝔹)
@@ -915,7 +915,7 @@ begin
   }
 end
 
-theorem rc_insertion_correctness (β : const → var → lin_type) (δ : const → fn) (wf : β ⊢ δ) : β ⊩ C_prog β δ :=
+theorem rc_insertion_correctness (β : const → var → lin_type) (δ : program) (wf : β ⊢ δ) : β ⊩ C_prog β δ :=
 begin
   cases wf,
   split,

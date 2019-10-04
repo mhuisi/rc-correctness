@@ -6,7 +6,7 @@ open rc_correctness.expr
 open rc_correctness.fn_body
 open rc_correctness.lin_type
 
-inductive fn_body_wf (β : const → var → lin_type) (δ : const → fn) : finset var → fn_body → Prop
+inductive fn_body_wf (β : const → var → lin_type) (δ : program) : finset var → fn_body → Prop
 notation Γ ` ⊢ `:1 F := fn_body_wf Γ F
 | ret {Γ : finset var} {x : var} 
   (x_def : x ∈ Γ) :
@@ -38,7 +38,7 @@ notation Γ ` ⊢ `:1 F := fn_body_wf Γ F
 
 notation β `; ` δ `; ` Γ ` ⊢ `:1 F := fn_body_wf β δ Γ F
 
-inductive const_wf (β : const → var → lin_type) (δ : const → fn) : const → Prop
+inductive const_wf (β : const → var → lin_type) (δ : program) : const → Prop
 notation `⊢ `:1 c := const_wf c
 | const {c : const}
   (F_wf : β; δ; (δ c).ys.to_finset ⊢ (δ c).F) : 
@@ -46,9 +46,9 @@ notation `⊢ `:1 c := const_wf c
 
 notation β `; ` δ ` ⊢ `:1 c := const_wf β δ c
 
-inductive program_wf (β : const → var → lin_type) : (const → fn) → Prop
+inductive program_wf (β : const → var → lin_type) : program → Prop
 notation `⊢ `:1 δ := program_wf δ
-| program {δ : const → fn}
+| program {δ : program}
   (const_wf : ∀ c : const, β; δ ⊢ c) :
   ⊢ δ
 

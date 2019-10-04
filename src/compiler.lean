@@ -46,7 +46,7 @@ def C (β : const → var → lin_type) : fn_body → (var → lin_type) → fn_
   C_app (ys.map (λ y, ⟨y, 𝕆⟩)) (z ≔ ⟪ys⟫i; C F (βₗ[z ↦ 𝕆])) βₗ
 | F βₗ := F
 
-def C_prog (β : const → var → lin_type) (δ : const → fn) (c : const) : fn := 
+def C_prog (β : const → var → lin_type) (δ : program) (c : const) : fn := 
   let (βₗ, f) := (β c, δ c) in ⟨f.ys, dec_𝕆 f.ys (C β f.F βₗ) βₗ⟩
 
 end rc_correctness

@@ -5,7 +5,7 @@ namespace rc_correctness
 -- ast defs
 def var := ℕ
 def const := ℕ
-def cnstr := ℕ
+def cnstr := ℕ 
 
 inductive expr : Type
 | const_app_full (c : const) (ys : list var) : expr
@@ -22,6 +22,8 @@ inductive fn_body : Type
 | dec (x : var) (F : fn_body) : fn_body
 
 structure fn := (ys : list var) (F : fn_body)
+
+def program := const → fn
 
 inductive rc : Type
 | expr (e : expr) : rc
@@ -57,13 +59,13 @@ def {l} fn_body.rec_wf (C : fn_body → Sort l)
   («case» : Π (x : var) (Fs : list fn_body) (Fs_ih : ∀ F ∈ Fs, C F), C (case x of Fs))
   («inc» : Π (x : var) (F : fn_body) (F_ih : C F), C (inc x; F))
   («dec» : Π (x : var) (F : fn_body) (F_ih : C F), C (dec x; F)) : Π (x : fn_body), C x
-| (fn_body.ret a) := «ret» a
-| (x ≔ a; a_1) := «let» x a a_1 (fn_body.rec_wf a_1)
-| (case a of a_1) := «case» a a_1 (λ a h, have sizeof a < 1 + sizeof a_1, 
+| (fn_body.ret x) := «ret» x
+| (x ≔ e; F) := «let» x e F (fn_body.rec_wf F)
+| (case x of Fs) := «case» x Fs (λ F h, have sizeof F < 1 + sizeof Fs, 
                                             from nat.lt_add_left _ _ _ (list.sizeof_lt_sizeof_of_mem h),
-                                          fn_body.rec_wf a)
-| (inc a; a_1) := «inc» a a_1 (fn_body.rec_wf a_1)
-| (dec a; a_1) := «dec» a a_1 (fn_body.rec_wf a_1)
+                                          fn_body.rec_wf F)
+| (inc x; F) := «inc» x F (fn_body.rec_wf F)
+| (dec x; F) := «dec» x F (fn_body.rec_wf F)
 
 
 -- free variables
