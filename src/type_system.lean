@@ -53,7 +53,7 @@ notation Γ ` ⊩ `:1 t := linear Γ t
   ys [∶] 𝕆 ⊩ c⟦ys…, _⟧ ∷ 𝕆
 | var_app (x y : var) :
   (x ∶ 𝕆) :: (y ∶ 𝕆) :: 0 ⊩ x⟦y⟧ ∷ 𝕆
-| cnstr_app (ys : list var) (i : cnstr) :
+| ctor_app (ys : list var) (i : cnstr) :
   ys [∶] 𝕆 ⊩ (⟪ys⟫i) ∷ 𝕆
 | «let» {Γ : type_context} {xs : list var} {e : expr} {Δ : type_context} {z : var} {F : fn_body}
   (xs_𝕆 : (xs [∶] 𝕆) ⊆ Δ) (e_𝕆 : Γ + (xs [∶] 𝔹) ⊩ e ∷ 𝕆) (F_𝕆 : (z ∶ 𝕆) :: Δ ⊩ F ∷ 𝕆) :
