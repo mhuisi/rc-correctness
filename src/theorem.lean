@@ -80,9 +80,9 @@ section FV_C
 
   lemma FV_𝕆plus_eq_FV {x : var} {F : fn_body} (V : finset var) (βₗ : var → lin_type) 
     (h : x ∈ FV F) :
-    FV (inc_𝕆 x V F βₗ) = FV F :=
+    FV (inc_𝕆_var x V F βₗ) = FV F :=
   begin
-    unfold inc_𝕆,
+    unfold inc_𝕆_var,
     split_ifs,
     { refl },
     unfold FV,
@@ -166,7 +166,7 @@ section FV_C
     simp only [C_app, FV] at *, 
     cases τ,
     { rw if_pos rfl,
-      unfold inc_𝕆, 
+      unfold inc_𝕆_var, 
       split_ifs,
       { exact xs_ih heq h },
       unfold FV,
@@ -191,7 +191,7 @@ section FV_C
   begin
     with_cases { induction F using rc_correctness.fn_body.rec_wf generalizing βₗ },
     case ret : x {
-      unfold FV C inc_𝕆, 
+      unfold FV C inc_𝕆_var, 
       split_ifs;
       simp only [FV, insert_eq_of_mem, insert_empty_eq_singleton, mem_singleton]
     },
@@ -589,7 +589,7 @@ begin
     unfold FV at y𝕆_sub_FV,
     cases wf,
     simp only [mem_union, ndunion_eq_union, to_finset_val, nodup_erase_dup, mem_erase_dup, finset.mem_mk] at wf_x_def,
-    unfold inc_𝕆,
+    unfold inc_𝕆_var,
     cases wf_x_def,
     { have : βₗ x = 𝕆 ∧ x ∉ finset.empty, from ⟨y𝕆_𝕆 x wf_x_def, finset.not_mem_empty x⟩,
       rw if_pos this,
@@ -837,7 +837,7 @@ begin
           rw y𝕆_𝕆 x z_in_y𝕆 at h,
           contradiction },
         { exact h'.right } } 
-    } 
+    }, sorry, sorry, sorry, sorry
   },
   case «case» : x Fs ih {
     unfold C,
@@ -850,10 +850,10 @@ begin
     cases wf,
     simp only [mem_union, ndunion_eq_union, to_finset_val, nodup_erase_dup, mem_erase_dup, finset.mem_mk] at wf_x_def,
     cases wf_x_def,
-    apply linear.case_o, 
+    apply linear.case_𝕆, 
     { simpa },
     swap,
-    apply linear.case_b,
+    apply linear.case_𝔹,
     { simpa },
     all_goals { 
       intros F' h,
@@ -877,9 +877,6 @@ begin
       { simp only [and_imp, mem_filter, finset.mem_sort],
         intros y y_in_y𝕆 h,
         exact y𝕆_𝕆 y y_in_y𝕆 },
-      { have : filter (λ (y : var), y ∈ FV (C β F (β c))) y𝕆 ⊆ y𝕆, from filter_subset y𝕆,
-        apply disjoint_of_subset_left this,
-        assumption },
       { have wf, from wf_Fs_wf F F_in_Fs,
         apply wf_FV_sandwich _ _ wf,
         { rw finset.subset_iff,

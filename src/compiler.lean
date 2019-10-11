@@ -6,7 +6,7 @@ open rc_correctness.expr
 open rc_correctness.fn_body
 open rc_correctness.lin_type
 
-def inc_𝕆 (x : var) (V : finset var) (F : fn_body) (βₗ : var → lin_type) : fn_body :=
+def inc_𝕆_var (x : var) (V : finset var) (F : fn_body) (βₗ : var → lin_type) : fn_body :=
 if βₗ x = 𝕆 ∧ x ∉ V then F else inc x; F
 
 def dec_𝕆_var (x : var) (F : fn_body) (βₗ : var → lin_type) : fn_body :=
@@ -22,13 +22,13 @@ def C_app : list (var × lin_type) → fn_body → (var → lin_type) → fn_bod
 | [] (z ≔ e; F) βₗ := z ≔ e; F
 | ((y, t)::xs) (z ≔ e; F) βₗ := 
   if t = 𝕆 then
-    inc_𝕆 y ((xs.map prod.fst).to_finset ∪ FV F) (C_app xs (z ≔ e; F) βₗ) βₗ
+    inc_𝕆_var y ((xs.map prod.fst).to_finset ∪ FV F) (C_app xs (z ≔ e; F) βₗ) βₗ
   else
     C_app xs (z ≔ e; dec_𝕆_var y F βₗ) βₗ
 | xs F βₗ := F
 
 def C (β : const → var → lin_type) : fn_body → (var → lin_type) → fn_body
-| (ret x) βₗ := inc_𝕆 x finset.empty (ret x) βₗ
+| (ret x) βₗ := inc_𝕆_var x finset.empty (ret x) βₗ
 | (case x of Fs) βₗ :=
   case x of Fs.map_wf (λ F h, dec_𝕆 ((FV (case x of Fs)).sort var_le) (C F βₗ) βₗ)
 | (y ≔ x[i]; F) βₗ := 
