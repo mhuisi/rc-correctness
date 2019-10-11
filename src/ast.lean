@@ -42,7 +42,7 @@ notation `⟪` ys `⟫` i := expr.ctor i ys
 notation x `[` i `]` := expr.proj i x
 
 -- fn_body
-notation x ` ≔ ` e `; ` F := fn_body.let x e F
+notation x ` ≔ ` e `; `F := fn_body.let x e F
 notation `case ` x ` of ` Fs := fn_body.case x Fs
 notation `inc ` x `; ` F := fn_body.inc x F
 notation `dec ` x `; ` F := fn_body.dec x F
@@ -61,9 +61,11 @@ def {l} fn_body.rec_wf (C : fn_body → Sort l)
   («dec» : Π (x : var) (F : fn_body) (F_ih : C F), C (dec x; F)) : Π (x : fn_body), C x
 | (fn_body.ret x) := «ret» x
 | (x ≔ e; F) := «let» x e F (fn_body.rec_wf F)
-| (case x of Fs) := «case» x Fs (λ F h, have sizeof F < 1 + sizeof Fs, 
-                                            from nat.lt_add_left _ _ _ (list.sizeof_lt_sizeof_of_mem h),
-                                          fn_body.rec_wf F)
+| (case x of Fs) := «case» x Fs (λ F h, 
+    have sizeof F < 1 + sizeof Fs, 
+      from nat.lt_add_left _ _ _ 
+        (list.sizeof_lt_sizeof_of_mem h),
+    fn_body.rec_wf F)
 | (inc x; F) := «inc» x F (fn_body.rec_wf F)
 | (dec x; F) := «dec» x F (fn_body.rec_wf F)
 
