@@ -1,5 +1,5 @@
 import compiler
-import well_foundedness
+import well_formedness
 
 namespace rc_correctness
 
@@ -23,7 +23,7 @@ section FV_wf
   open finset
   open list
 
-  theorem FV_subset_finset_var {δ : program} {β : const → var → lin_type} {Γ : finset var} {F : fn_body} 
+  theorem FV_sub_wf_context {δ : program} {β : const → var → lin_type} {Γ : finset var} {F : fn_body} 
     (h : β; δ; Γ ⊢ F) : 
     FV F ⊆ Γ :=
   begin
@@ -45,7 +45,7 @@ section FV_wf
         try { simp only [subset_iff, mem_to_finset] at h_ys_def };
         try { exact h_ys_def h₁ };
         try { rwa h₁ },
-        { cases h₁; rwa h₁ } },
+        cases h₁; rwa h₁ },
       { cases h₁,
         cases h; 
         { replace ih := subset_iff.mp (ih h_F_wf) h₁_right,
@@ -78,7 +78,7 @@ end FV_wf
 section FV_C
   open finset
 
-  lemma FV_𝕆plus_eq_FV {x : var} {F : fn_body} (V : finset var) (βₗ : var → lin_type) 
+  lemma FV_inc_𝕆_var_eq_FV {x : var} {F : fn_body} (V : finset var) (βₗ : var → lin_type) 
     (h : x ∈ FV F) :
     FV (inc_𝕆_var x V F βₗ) = FV F :=
   begin
@@ -89,19 +89,19 @@ section FV_C
     exact insert_eq_of_mem h
   end
 
-  lemma FV_sub_FV_dec_𝕆 (vars : list var) (F : fn_body) (βₗ : var → lin_type) 
-    : FV F ⊆ FV (dec_𝕆 vars F βₗ) :=
+  lemma FV_sub_FV_dec_𝕆 (ys : list var) (F : fn_body) (βₗ : var → lin_type) 
+    : FV F ⊆ FV (dec_𝕆 ys F βₗ) :=
   begin
     apply subset_iff.mpr,
     intros x h,
     unfold dec_𝕆 dec_𝕆_var,
-    induction vars,
+    induction ys,
     { simpa only [list.foldr_nil] },
     simp only [list.foldr_cons],
     split_ifs,
     { simp only [FV, mem_insert],
-      exact or.inr vars_ih },
-    { exact vars_ih }
+      exact or.inr ys_ih },
+    { exact ys_ih }
   end
 
   lemma FV_dec_𝕆_filter (ys : list var) (F : fn_body) (βₗ : var → lin_type) 
@@ -386,7 +386,7 @@ section sandwich
       exact h_ys_def h 
     },
     any_goals { 
-      cases mem_insert.mp (subset_iff.mp (FV_subset_finset_var h_F_wf) h_right), 
+      cases mem_insert.mp (subset_iff.mp (FV_sub_wf_context h_F_wf) h_right), 
       { contradiction },
       { assumption } 
     }, 
@@ -407,7 +407,7 @@ section sandwich
         { rwa h },
         rcases h with ⟨S, ⟨⟨a, ⟨a_in_Fs, a_def⟩⟩, x_in_S⟩⟩,
         rw ←a_def at x_in_S,
-        exact subset_iff.mp (FV_subset_finset_var (h_Fs_wf a a_in_Fs)) x_in_S } }
+        exact subset_iff.mp (FV_sub_wf_context (h_Fs_wf a a_in_Fs)) x_in_S } }
   end
 
   lemma wf_FV_sandwich {β : const → var → lin_type} {δ : program} {Γ Γ' : finset var} {F : fn_body} 
@@ -642,7 +642,7 @@ begin
       unfold C,
       split_ifs,
       { have x_in_y𝕆 : x ∈ y𝕆,
-        { let := subset_iff.mp (FV_subset_finset_var wf),
+        { let := subset_iff.mp (FV_sub_wf_context wf),
           simp only [FV, FV_expr, mem_union, finset.singleton_val, to_finset_val,
             finset.insert_empty_eq_singleton, mem_erase_dup, finset.erase_val,
             finset.union_val, mem_singleton] at this, 
@@ -690,7 +690,7 @@ begin
               { assumption } } },
             { cases wf,
               apply wf_FV_sandwich _ _ wf_F_wf,
-              { let := FV_subset_finset_var wf_F_wf,
+              { let := FV_sub_wf_context wf_F_wf,
                 rw finset.subset_iff at ⊢ this,
                 simp only [mem_ndinsert, mem_ndunion, to_finset_val, finset.insert_union, finset.mem_union,
                   finset.mem_insert, mem_erase_dup, to_finset_cons, finset.insert_val, finset.mem_mk, mem_to_finset] at ⊢ this,
@@ -757,7 +757,7 @@ begin
             { assumption } } },
         { cases wf,
           apply wf_FV_sandwich _ _ wf_F_wf,
-          { let := FV_subset_finset_var wf_F_wf,
+          { let := FV_sub_wf_context wf_F_wf,
             rw finset.subset_iff at ⊢ this,
             simp only [mem_union, ndunion_eq_union, to_finset_val, nodup_erase_dup, finset.insert_union,
               finset.mem_union, finset.mem_insert, mem_erase_dup, to_finset_cons, finset.mem_mk, mem_to_finset] at ⊢ this,
@@ -780,7 +780,7 @@ begin
           { exact h''.right } } },
       rw [←ne.def, not_𝕆_iff_𝔹] at h,
       have x_in_y𝔹 : x ∈ y𝔹,
-      { let := subset_iff.mp (FV_subset_finset_var wf),
+      { let := subset_iff.mp (FV_sub_wf_context wf),
         simp only [FV, FV_expr, mem_union, finset.singleton_val, to_finset_val,
           finset.insert_empty_eq_singleton, mem_erase_dup, finset.erase_val,
           finset.union_val, mem_singleton] at this, 
@@ -821,7 +821,7 @@ begin
           assumption } },
       { cases wf,
         apply wf_FV_sandwich _ _ wf_F_wf,
-        { let := FV_subset_finset_var wf_F_wf,
+        { let := FV_sub_wf_context wf_F_wf,
           rw finset.subset_iff at ⊢ this,
           simp only [mem_union, ndunion_eq_union, to_finset_val, nodup_erase_dup, finset.mem_union, finset.union_insert,
             finset.mem_insert, mem_erase_dup, to_finset_cons, finset.mem_mk, mem_to_finset] at ⊢ this,
@@ -842,7 +842,7 @@ begin
   case «case» : x Fs ih {
     unfold C,
     have FV_sub_y𝕆_y𝔹 : (FV (case x of Fs)).val ⊆ y𝕆 + y𝔹,
-    { let := FV_subset_finset_var wf,
+    { let := FV_sub_wf_context wf,
       rw finset.subset_def at this,
       rw subset_iff at ⊢ this,
       simp only [mem_union, to_finset_val, mem_add, mem_erase_dup, finset.union_val] at ⊢ this,
@@ -987,7 +987,7 @@ begin
   have wf' : (β; δ; to_finset y𝕆' ∪ to_finset y𝔹 ⊢ (δ c).F),
   { rw to_finset_add at wf,
     have h1 : FV (δ c).F ⊆ to_finset y𝕆' ∪ to_finset y𝔹,
-    { have : FV (δ c).F ⊆ to_finset y𝕆 ∪ to_finset y𝔹, from FV_subset_finset_var wf,
+    { have : FV (δ c).F ⊆ to_finset y𝕆 ∪ to_finset y𝔹, from FV_sub_wf_context wf,
       rw finset.subset_iff at this,
       rw finset.subset_iff,
       intros x x_in_FV,
