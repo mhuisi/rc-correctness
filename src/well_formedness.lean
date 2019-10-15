@@ -1,4 +1,5 @@
 import type_system
+import data.multiset
 
 namespace rc_correctness
 
@@ -41,7 +42,7 @@ notation β `; ` δ `; ` Γ ` ⊢ `:1 F := fn_body_wf β δ Γ F
 inductive const_wf (β : const → var → lin_type) (δ : program) : const → Prop
 notation `⊢ `:1 c := const_wf c
 | const {c : const}
-  (F_wf : β; δ; (δ c).ys.to_finset ⊢ (δ c).F) : 
+  (F_wf : β; δ; (δ c).ys.to_finset ⊢ (δ c).F) (nd_ys : multiset.nodup (δ c).ys) : 
   ⊢ c
 
 notation β `; ` δ ` ⊢ `:1 c := const_wf β δ c
