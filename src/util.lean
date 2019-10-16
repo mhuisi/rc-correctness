@@ -459,7 +459,7 @@ namespace list
 
   section map_on_of_nodup
     local attribute [instance] classical.prop_decidable
-    lemma map_on_of_nodup {α β : Type*} {f : α → β} {s : list α} (nd : nodup (map f s)) 
+    lemma inj_on_of_nodup_map {α β : Type*} {f : α → β} {s : list α} (nd : nodup (map f s)) 
       {x : α} (x_in_s : x ∈ s) {y : α} (y_in_s : y ∈ s) (f_eq : f x = f y) : x = y := 
     begin
       unfold nodup at nd,
@@ -675,9 +675,9 @@ namespace multiset
     exact h x x_in_s p1_x
   end
 
-  lemma map_on_of_nodup {α β : Type*} {f : α → β} {s : multiset α} : 
+  lemma inj_on_of_nodup_map {α β : Type*} {f : α → β} {s : multiset α} : 
     nodup (map f s) → ∀ x ∈ s, ∀ y ∈ s, f x = f y → x = y := 
-  quot.induction_on s (λ l, @list.map_on_of_nodup α β f l)
+  quot.induction_on s (λ l, @list.inj_on_of_nodup_map α β f l)
 
   lemma map_add_of_disjoint {α β : Type*} [decidable_eq α] (f1 f2 : α → β) {s1 s2 : multiset α} (h : disjoint s1 s2) : 
     map f1 s1 + map f2 s2 = map (λ x, if x ∈ s1 then f1 x else f2 x) (s1 + s2) :=
@@ -749,8 +749,6 @@ namespace finset
     { exact or.inr h₁ }
   end
 
-  -- cool sort lemmas that i didn't need in the end that are useful for
-  -- induction over a finset in a sort
   lemma sort_empty {α : Type*} (r : α → α → Prop) [decidable_rel r]
     [is_trans α r] [is_antisymm α r] [is_total α r] :
     sort r ∅ = [] :=
