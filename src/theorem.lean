@@ -567,6 +567,29 @@ begin
   assumption
 end
 
+theorem C_app_rc_insertion_correctness {β : const → var → lin_type} {βₗ : var → lin_type} {δ : program}
+  {y : var} {e : expr} {F : fn_body} {y𝕆 y𝔹 : multiset var} {Γ : list (var × lin_type)}
+  (ih : ∀ (βₗ : var → lin_type),
+    nodup y𝕆 →
+    nodup y𝔹 →
+    (∀ (y : var), y ∈ y𝕆 → βₗ y = 𝕆) →
+    (∀ (y : var), y ∈ y𝔹 → βₗ y = 𝔹) →
+    (β; δ; to_finset y𝕆 ∪ to_finset y𝔹 ⊢ F) →
+    (∀ ⦃x : var⦄, x ∈ y𝕆 → x ∈ FV F) →
+    (β; (y𝕆 {∶} 𝕆) + (y𝔹 {∶} 𝔹) ⊩ ↑(C β F βₗ) ∷ 𝕆))
+  (nd_y𝕆 : nodup y𝕆) (nd_y𝔹 : nodup y𝔹)
+  (y𝕆_𝕆 : ∀ (y : var), y ∈ y𝕆 → βₗ y = 𝕆)
+  (y𝔹_𝔹 : ∀ (y : var), y ∈ y𝔹 → βₗ y = 𝔹)
+  (wf : β; δ; to_finset y𝕆 ∪ to_finset y𝔹 ⊢ (y ≔ e; F))
+  (y𝕆_free : ∀ ⦃x : var⦄, x ∈ y𝕆 → x ∈ FV (y ≔ e; F))
+  (ty : β; (Γ.map (λ (yτ : var × lin_type), yτ.1 ∶ yτ.2)) ⊩ e ∷ 𝕆)
+  : (β; (y𝕆 {∶} 𝕆) + (y𝔹 {∶} 𝔹) ⊩ ↑(C_app Γ (y ≔ e; C β F (βₗ[y↦𝕆])) βₗ) ∷ 𝕆) :=
+begin
+  sorry
+end
+
+
+
 theorem rc_insertion_correctness' {β : const → var → lin_type} {δ : program} {c : const}
   {y𝕆 y𝔹 : multiset var}
   (nd_y𝕆 : nodup y𝕆) (nd_y𝔹 : nodup y𝔹)
@@ -835,7 +858,50 @@ begin
           rw y𝕆_𝕆 x z_in_y𝕆 at h,
           contradiction },
         { exact h'.right } } 
-    }, sorry, sorry, sorry, sorry
+    }, 
+    case rc_correctness.expr.const_app_full : c' ys {
+      unfold C,
+      apply C_app_rc_insertion_correctness ih nd_y𝕆 nd_y𝔹 y𝕆_𝕆 y𝔹_𝔹 wf y𝕆_sub_FV,
+      simp only [list.map_map],
+      have : ∀ y ∈ ys, ((λ (yτ : var × lin_type), yτ.fst ∶ yτ.snd) ∘ (λ (y : var), (y, β c' y))) y = (λ (y : var), y ∶ β c' y) y,
+      { intros y' y'_in_ys, 
+        refl },
+      rw list.map_congr this,
+      exact linear.const_app_full β ys c'
+    },
+    case rc_correctness.expr.const_app_part : c' ys {
+      unfold C,
+      have : ∀ y ∈ ys, (y, β c' y) = (y, 𝕆),
+      { cases wf,
+        intros y' y'_in_ys,
+        have not_𝔹, from wf_no_𝔹_var y',
+        rw not_𝔹_iff_𝕆 at not_𝔹,
+        rw not_𝔹 },
+      rw list.map_congr this,
+      apply C_app_rc_insertion_correctness ih nd_y𝕆 nd_y𝔹 y𝕆_𝕆 y𝔹_𝔹 wf y𝕆_sub_FV,
+      rw list.map_map,
+      have : ∀ y ∈ ys, ((λ (yτ : var × lin_type), yτ.fst ∶ yτ.snd) ∘ (λ (y : var), (y, 𝕆))) y = (λ (y : var), y ∶ 𝕆) y,
+      { intros y' y'_in_ys, 
+        refl },
+      rw list.map_congr this,
+      exact linear.const_app_part β ys c'
+    },
+    case rc_correctness.expr.var_app : x z {
+      unfold C,
+      apply C_app_rc_insertion_correctness ih nd_y𝕆 nd_y𝔹 y𝕆_𝕆 y𝔹_𝔹 wf y𝕆_sub_FV,
+      simp only [list.map],
+      exact linear.var_app β x z
+    },
+    case rc_correctness.expr.ctor : i ys {
+      unfold C,
+      apply C_app_rc_insertion_correctness ih nd_y𝕆 nd_y𝔹 y𝕆_𝕆 y𝔹_𝔹 wf y𝕆_sub_FV,
+      rw list.map_map,
+      have : ∀ y ∈ ys, ((λ (yτ : var × lin_type), yτ.fst ∶ yτ.snd) ∘ (λ (y : var), (y, 𝕆))) y = (λ (y : var), y ∶ 𝕆) y,
+      { intros y' y'_in_ys, 
+        refl },
+      rw list.map_congr this,
+      exact linear.ctor_app β ys i
+    }
   },
   case «case» : x Fs ih {
     unfold C,
