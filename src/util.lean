@@ -26,22 +26,22 @@ namespace list
   lemma map_wf_eq_map {α β : Type*} [has_sizeof α] {xs : list α} {f : α → β} : map_wf xs (λ a _, f a) = map f xs :=
   by simp only [map_wf, attach, map_pmap, pmap_eq_map]
 
+  lemma filter_cons {α : Type*} (p : α → Prop) [decidable_pred p] (a : α) (l : list α)
+    : filter p (a :: l) = a :: filter p l ∨ filter p (a :: l) = filter p l :=
+  by { by_cases p a, { exact or.inl (filter_cons_of_pos l h) }, { exact or.inr (filter_cons_of_neg l h) } }
+
   lemma sizeof_filter_le_sizeof {α : Type*} (p : α → Prop) [decidable_pred p] (xs : list α) : list.sizeof (filter p xs) <= list.sizeof xs :=
   begin
     induction xs,
     { rw list.filter_nil },
-    by_cases p xs_hd,
-    { rw filter_cons_of_pos xs_tl h, 
-      unfold_sizeof,
-      assumption },
-    { rw filter_cons_of_neg xs_tl h,
-      unfold_sizeof,
-      exact le_add_left xs_ih }
+    cases filter_cons p xs_hd xs_tl; rw h; unfold_sizeof,
+    { assumption },
+    { exact le_add_left xs_ih }
   end
 
-  lemma all_map_bool_iff_all {α : Type*} (p : α → bool) (xs : list α) : list.all (list.map p xs) id ↔ list.all xs p :=
+  lemma all_map_iff_all {α : Type*} (p : α → bool) (xs : list α) : list.all (list.map p xs) id ↔ list.all xs p :=
   begin
-    simp only [all_iff_forall, and_imp, id.def, mem_map, exists_imp_distrib],
+    simp only [all_iff_forall, and_imp, mem_map, exists_imp_distrib],
     split;
     intro h,
     { intros a a_in_xs,
@@ -90,14 +90,13 @@ namespace list
     : c ∈ contexts_aux pre xs → pre ++ xs = ↑c :=
   begin
     intro c_context,
-    induction xs generalizing pre,
-    { simp only [contexts_aux, not_mem_nil] at c_context,
-      contradiction },
-    simp only [contexts_aux, mem_cons_iff] at c_context,
+    induction xs generalizing pre;
+    simp only [contexts_aux, not_mem_nil, mem_cons_iff] at c_context,
+    { contradiction },
     cases c_context,
     { rw c_context, refl },
     rw ←xs_ih c_context,
-    simp only [list.cons_append, list.nil_append, list.append_assoc, list.concat_eq_append]
+    simp only [cons_append, nil_append, append_assoc, concat_eq_append]
   end
 
   lemma of_mem_contexts {α : Type*} {pre xs : list α} {c : context α} 
@@ -119,12 +118,8 @@ namespace list
   def group {α : Type*} [p : setoid α] [decidable_rel p.r] : list α → list (list α) 
   | []        := []
   | (x :: xs) := have list.sizeof (filter (not ∘ (≈ x)) xs) < 1 + list.sizeof xs, from 
-    begin 
-      have h : list.sizeof (filter (not ∘ (≈ x)) xs) ≤ list.sizeof xs, from sizeof_filter_le_sizeof _ xs,
-      rw nat.add_comm,
-      rw ←nat.succ_eq_add_one,
-      rwa nat.lt_succ_iff
-    end, (x :: filter (≈ x) xs) :: group (filter (not ∘ (≈ x)) xs)
+    by { rw [nat.add_comm, ←nat.succ_eq_add_one, nat.lt_succ_iff], exact sizeof_filter_le_sizeof _ xs },
+    (x :: filter (≈ x) xs) :: group (filter (not ∘ (≈ x)) xs)
 
   lemma sizeof_lt_of_length_lt {α : Type*} {xs ys : list α} (h : length xs < length ys) : list.sizeof xs < list.sizeof ys :=
   begin
@@ -165,15 +160,11 @@ namespace list
     by_cases p xs_hd,
     { rw filter_cons_of_pos xs_tl h,
       rw @filter_cons_of_neg _ (not ∘ p) _ _ xs_tl (non_contradictory_intro h),
-      simp only [cons_append, count_cons'],
-      apply congr_arg (+ ite (a = xs_hd) 1 0),
-      assumption },
+      simpa only [cons_append, count_cons', add_right_inj] },
     { rw @filter_cons_of_pos _ (not ∘ p) _ _ xs_tl h,
       rw filter_cons_of_neg xs_tl h, 
       simp only [count_append, count_cons'],
-      rw ←add_assoc,
-      apply congr_arg (+ ite (a = xs_hd) 1 0),
-      rwa ←count_append }
+      rwa [←add_assoc, add_right_inj, ←count_append] }
   end
 
   lemma length_filter_lt_length_cons {α : Type*} (p : α → Prop) [decidable_pred p] (x : α) (xs : list α) : 
@@ -187,29 +178,21 @@ namespace list
     letI := classical.dec_eq α,
     induction xs using list.strong_induction_on with xs ih,
     cases xs,
-    { simp only [group, join] },
-    rw perm_iff_count,
+    { refl },
+    have perm := ih (filter (not ∘ (≈ xs_hd)) xs_tl) (length_filter_lt_length_cons _ xs_hd xs_tl),
+    rw perm_iff_count at ⊢ perm,
     intro a,
-    simp only [group, cons_append, join, count_cons'],
-    apply congr_arg (+ ite (a = xs_hd) 1 0),
-    simp only [count_append],
-    simp only [] at ih,
-    replace ih := ih (filter (not ∘ (≈ xs_hd)) xs_tl),
-    have h : length (filter (not ∘ (≈ xs_hd)) xs_tl) < length (xs_hd :: xs_tl),
-    { exact length_filter_lt_length_cons _ xs_hd xs_tl },
-    have perm, from ih h,
-    rw perm_iff_count at perm,
-    rw perm a,
+    simp only [group, cons_append, join, count_cons', add_right_inj, count_append, perm a] at ⊢ ih,
     rw ←count_append,
     revert a,
     rw ←perm_iff_count,
     exact filter_append_not_filter_perm (≈ xs_hd) xs_tl
   end
 
-  lemma group_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs : list α} : 
-    ∀ g ∈ group xs, ∀ x y ∈ g, x ≈ y :=
+  lemma group_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs g : list α} {x y : α}: 
+    g ∈ group xs → x ∈ g → y ∈ g → x ≈ y :=
   begin
-    intros g g_group x y x_in_g y_in_g,
+    intros g_group x_in_g y_in_g,
     induction xs using list.strong_induction_on with xs ih,
     cases xs,
     { simp only [group, not_mem_nil] at g_group,
@@ -298,9 +281,9 @@ namespace list
       suffices g : ∀ x1 ∈ g1, ∀ x2 ∈ g2, x1 ≈ x2,
       { exact group_equiv_disjoint' xs g1 g2 g1_group g2_group g },
       intros y1 y1_in_g1 y2 y2_in_g2,
-      calc y1 ≈ x1 : group_equiv g1 g1_group y1 x1 y1_in_g1 x1_in_g1
+      calc y1 ≈ x1 : group_equiv g1_group y1_in_g1 x1_in_g1
           ... ≈ x2 : h
-          ... ≈ y2 : group_equiv g2 g2_group x2 y2 x2_in_g2 y2_in_g2
+          ... ≈ y2 : group_equiv g2_group x2_in_g2 y2_in_g2
     end
   end group_equiv_disjoint
 
@@ -609,14 +592,14 @@ namespace multiset
     contradiction
   end
 
-  lemma group'_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs : list α} : 
-    ∀ g ∈ group' xs, ∀ x y ∈ g, x ≈ y :=
+  lemma group'_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs : list α} {g : multiset α} {x y : α} : 
+    g ∈ group' xs → x ∈ g → y ∈ g → x ≈ y :=
   begin
     simp only [group', and_imp, list.mem_map, mem_coe, exists_imp_distrib],
-    intros g x h heq,
+    intros g' g'_group heq,
     rw ←heq,
     simp only [mem_coe],
-    exact list.group_equiv x h
+    exact list.group_equiv g'_group
   end
 
   lemma pairwise_equiv_disjoint_group' {α : Type*} [decidable_eq α] [p : setoid α] [decidable_rel p.r] (xs : list α) :
@@ -666,7 +649,7 @@ namespace multiset
     simp only [coe_eq_coe],
     have g_hd_mem_a, from (subset_of_eq a_eq_g).right (mem_cons_self g_hd g_tl),
     simp only [mem_coe] at g_hd_mem_a,
-    have g_hd_equiv_a_hd, from list.group_equiv (a_hd :: a_tl) a_group a_hd g_hd (list.mem_cons_self a_hd a_tl) g_hd_mem_a,
+    have g_hd_equiv_a_hd, from list.group_equiv a_group (list.mem_cons_self a_hd a_tl) g_hd_mem_a,
     have equiv : (∀ x ∈ xs, x ≈ a_hd ↔ x ≈ g_hd),
     { intros x x_in_xs,
       split;
@@ -700,9 +683,9 @@ namespace multiset
   lemma nil_not_mem_group {α : Type*} [p : setoid α] [decidable_rel p.r] (xs : multiset α) : ∅ ∉ group xs :=
   quot.induction_on xs nil_not_mem_group'
 
-  lemma group_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs : multiset α} : 
-    ∀ g ∈ group xs, ∀ x y ∈ g, x ≈ y :=
-  quot.induction_on xs (@group'_equiv _ _ _)
+  lemma group_equiv {α : Type*} [p : setoid α] [decidable_rel p.r] {xs g : multiset α} {x y : α} : 
+    g ∈ group xs → x ∈ g → y ∈ g → x ≈ y :=
+  quot.induction_on xs (λ l, group'_equiv)
 
   lemma pairwise_equiv_disjoint_group {α : Type*} [decidable_eq α] [p : setoid α] [decidable_rel p.r] (xs : multiset α) :
     pairwise (λ g1 g2 : multiset α, ∀ x1 ∈ g1, ∀ x2 ∈ g2, ¬(x1 ≈ x2)) (group xs) :=
