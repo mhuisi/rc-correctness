@@ -51,6 +51,71 @@ namespace list
     exact h'.subst (h a a_in_xs)
   end
   
+  structure context (α : Type*) := (pre : list α) (x : α) (post : list α)
+
+  instance context_to_list {α : Type*} : has_coe (context α) (list α) := 
+  ⟨λ c, c.pre ++ c.x :: c.post⟩
+
+  def contexts_aux {α : Type*} : list α → list α → list (context α)
+  | pre [] := []
+  | pre (x :: xs) := ⟨pre, x, xs⟩ :: contexts_aux (pre.concat x) xs
+
+  def contexts {α : Type*} (xs : list α) : list (context α) := contexts_aux [] xs
+
+  lemma contexts_aux_pre_cons_elim {α : Type*} (p : α) (pre xs : list α)
+    : contexts_aux (p :: pre) xs = map (λ c : context α, ⟨p :: c.pre, c.x, c.post⟩) (contexts_aux pre xs) :=
+  begin
+    induction xs generalizing pre, 
+    { simp only [contexts_aux, map] },
+    simp [contexts_aux, xs_ih _]
+  end
+
+  lemma contexts_aux_pre_elim {α : Type*} (pre xs : list α)
+    : contexts_aux pre xs = map (λ c : context α, ⟨pre ++ c.pre, c.x, c.post⟩) (contexts_aux [] xs) :=
+  begin
+    induction pre,
+    { simp only [nil_append],
+      have : (λ (c : context α), (⟨c.pre, c.x, c.post⟩ : context α)) = id,
+      { ext, cases x, refl },
+      rw [this, map_id] },
+    simp only [contexts_aux_pre_cons_elim _ _, pre_ih, cons_append, map_map]
+  end
+
+  lemma contexts_nil (α : Type*) : contexts ([] : list α) = [] := rfl
+
+  lemma contexts_cons {α : Type*} (x : α) (xs : list α) 
+    : contexts (x :: xs) = ⟨[], x, xs⟩ :: contexts_aux [x] xs := rfl
+
+  lemma of_mem_contexts_aux {α : Type*} {pre xs : list α} {c : context α} 
+    : c ∈ contexts_aux pre xs → pre ++ xs = ↑c :=
+  begin
+    intro c_context,
+    induction xs generalizing pre,
+    { simp only [contexts_aux, not_mem_nil] at c_context,
+      contradiction },
+    simp only [contexts_aux, mem_cons_iff] at c_context,
+    cases c_context,
+    { rw c_context, refl },
+    rw ←xs_ih c_context,
+    simp only [list.cons_append, list.nil_append, list.append_assoc, list.concat_eq_append]
+  end
+
+  lemma of_mem_contexts {α : Type*} {pre xs : list α} {c : context α} 
+    : c ∈ contexts xs → xs = ↑c := of_mem_contexts_aux
+
+  lemma mem_contexts_self {α : Type*} (c : context α) : c ∈ contexts (↑c : list α) :=
+  begin
+    cases c,
+    induction c_pre;
+    unfold_coes,
+    { simp only [nil_append, contexts_cons, mem_cons_self] },
+    simp only [contexts, contexts_aux, mem_cons_iff, cons_append, concat_eq_append, false_or, nil_append, false_and],
+    unfold_coes at c_pre_ih,
+    rw [contexts_aux_pre_elim, mem_map],
+    use ⟨c_pre_tl, c_x, c_post⟩,
+    simpa
+  end
+
   def group {α : Type*} [p : setoid α] [decidable_rel p.r] : list α → list (list α) 
   | []        := []
   | (x :: xs) := have list.sizeof (filter (not ∘ (≈ x)) xs) < 1 + list.sizeof xs, from 

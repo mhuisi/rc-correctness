@@ -588,8 +588,6 @@ begin
   sorry
 end
 
-
-
 theorem rc_insertion_correctness' {β : const → var → lin_type} {δ : program} {c : const}
   {y𝕆 y𝔹 : multiset var}
   (nd_y𝕆 : nodup y𝕆) (nd_y𝔹 : nodup y𝔹)
