@@ -50,7 +50,9 @@ namespace list
     intros b a a_in_xs h',
     exact h'.subst (h a a_in_xs)
   end
-  
+
+
+
   lemma filter_filter_swap {α : Type*} (p q : α → Prop) [decidable_pred p] [decidable_pred q] (xs : list α)
     : filter p (filter q xs) = filter q (filter p xs) :=
   by simp only [filter_filter, @filter_congr _ (λ a, p a ∧ q a) (λ a, q a ∧ p a) _ _ _ (λ x x_in_xs, ⟨and.symm, and.symm⟩)]
@@ -230,34 +232,6 @@ namespace list
     { exact not_mem_nil nil },
     simp only [group, mem_cons_iff, not_or_distrib, true_and, not_false_iff, 
       ih _ (length_filter_lt_length_cons _ _ _)]
-  end
-
-  lemma bar {α : Type*} [s : setoid α] [decidable_rel s.r] (p : α → Prop) [decidable_pred p] (xs : list α)
-  : group (filter p xs) = map (filter p) (group xs) :=
-  begin
-    resetI, induction xs using list.strong_induction_on with xs ih generalizing p, cases xs,
-    { refl },
-    simp only [group, map],
-    by_cases h : p xs_hd,
-    { simp [filter_cons_of_pos _ h, group, -filter_filter, filter_filter_swap, ih _ (length_filter_lt_length_cons _ _ _)] },
-    rw [filter_cons_of_neg _ h, filter_cons_of_neg _ h],
-    rw [ih _ (lt_add_one (length _)), ih _ (lt_add_one (length _))],
-    simp [filter_filter_comp],
-    generalize : group xs_tl = ys,
-    sorry
-  end
-
-  lemma foo {α : Type*} [p : setoid α] [decidable_rel p.r] {xs ys_tl : list α} {x ys_hd : α} :
-    xs ∈ group (filter (not ∘ (≈ ys_hd)) ys_tl) → x ∈ xs
-    → ¬(x ≈ ys_hd) :=
-  begin
-    intros h x_in_xs,
-    cases xs,
-    { exact absurd x_in_xs (not_mem_nil _) },
-    replace h3 := mem_join.mpr ⟨xs_hd :: xs_tl, ⟨h, mem_cons_self xs_hd xs_tl⟩⟩,
-    rw (mem_of_perm (join_group_perm _)).mp (mem_join.mpr ⟨xs_hd :: xs_tl, ⟨h, mem_cons_self xs_hd xs_tl⟩⟩) at h3,
-    replace h3 := of_mem_filter h3,
-    simp only [function.comp_app] at h3,
   end
 
   lemma group_equiv_disjoint' {α : Type*} [p : setoid α] [decidable_rel p.r] {xs g1 g2 : list α} : 
