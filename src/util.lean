@@ -51,14 +51,22 @@ namespace list
     exact h'.subst (h a a_in_xs)
   end
 
-
-
   lemma filter_filter_swap {α : Type*} (p q : α → Prop) [decidable_pred p] [decidable_pred q] (xs : list α)
     : filter p (filter q xs) = filter q (filter p xs) :=
   by simp only [filter_filter, @filter_congr _ (λ a, p a ∧ q a) (λ a, q a ∧ p a) _ _ _ (λ x x_in_xs, ⟨and.symm, and.symm⟩)]
 
   lemma filter_filter_comp {α : Type*} (p q : α → Prop) [decidable_pred p] [decidable_pred q]
     : filter p ∘ filter q = filter (λ a, p a ∧ q a) := by { funext, rw [function.comp_app, list.filter_filter] }
+
+  lemma map_fst_zip {α β : Type*} : ∀ (xs : list α) (ys : list β), length xs <= length ys → map prod.fst (zip xs ys) = xs
+  | [] ys h := rfl
+  | xs [] h := by simp only [zip_nil_right, map, length_eq_zero.mp (le_zero_iff_eq.mp h)]
+  | (x :: xs) (y :: ys) h := by simp [zip_cons_cons, map, map_fst_zip xs ys (nat.lt_succ_iff.mp h)]
+
+  lemma map_snd_zip {α β : Type*} : ∀ (xs : list α) (ys : list β), length ys <= length xs → map prod.snd (zip xs ys) = ys
+  | xs [] h := by { rw zip_nil_right, refl }
+  | [] ys h := by simp only [zip_nil_right, map, length_eq_zero.mp (le_zero_iff_eq.mp h)]
+  | (x :: xs) (y :: ys) h := by simp [zip_cons_cons, map, map_snd_zip xs ys (nat.lt_succ_iff.mp h)]
 
   structure context (α : Type*) := (pre : list α) (x : α) (post : list α)
 
@@ -130,22 +138,23 @@ namespace list
     by { rw [nat.add_comm, ←nat.succ_eq_add_one, nat.lt_succ_iff], exact sizeof_filter_le_sizeof _ xs },
     (x :: filter (≈ x) xs) :: group (filter (not ∘ (≈ x)) xs)
 
+  lemma group_nil {α : Type*} [p : setoid α] [decidable_rel p.r]
+    : group ([] : list α) = [] := rfl 
+
+  lemma group_cons {α : Type*} [p : setoid α] [decidable_rel p.r] (x : α) (xs : list α)
+    : group (x :: xs) = (x :: filter (≈ x) xs) :: group (filter (not ∘ (≈ x)) xs) := by unfold group
+
+  lemma zero_lt_sizeof {α : Type*} : Π (xs : list α), 0 < list.sizeof xs
+  | [] := zero_lt_one
+  | (x :: xs) := nat.zero_lt_one_add _
+
   lemma sizeof_lt_of_length_lt {α : Type*} {xs ys : list α} (h : length xs < length ys) : list.sizeof xs < list.sizeof ys :=
   begin
-    induction xs generalizing ys,
-    { cases ys;
-      unfold_sizeof,
-      { exact absurd h (lt_irrefl (length nil)) },
-      cases ys_tl;
-      unfold_sizeof,
-      { exact zero_lt_one },
-      exact nat.zero_lt_one_add (list.sizeof ys_tl_tl) },
-    cases ys;
-    unfold_sizeof,
-    { simp only [add_comm, length] at h, 
-      exact false.elim (nat.not_succ_le_zero (1 + length xs_tl) h) },
-    simp only [add_comm, length, add_lt_add_iff_left] at h,
-    exact xs_ih h
+    induction xs generalizing ys; cases ys; unfold_sizeof,
+    { exact absurd h (lt_irrefl _) },
+    { exact zero_lt_sizeof _ },
+    { exact (nat.not_succ_le_zero _ h).elim },
+    { exact xs_ih ((add_lt_add_iff_right _).mp h) }
   end
 
   @[elab_as_eliminator] def strong_induction_on {α : Type*} {p : list α → Sort*} :

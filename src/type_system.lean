@@ -22,7 +22,7 @@ open rc_correctness.expr
 open rc_correctness.fn_body
 open rc_correctness.lin_type
 
-inductive linear (β : const → var → lin_type) : type_context → typed_rc → Prop
+inductive linear (δ : program) (β : const → var → lin_type) : type_context → typed_rc → Prop
 notation Γ ` ⊩ `:1 t := linear Γ t
 | weaken {Γ : type_context} {t : typed_rc} (x : var) 
   (t_typed : Γ ⊩ t) :
@@ -48,7 +48,7 @@ notation Γ ` ⊩ `:1 t := linear Γ t
   (x_𝔹 : (x ∶ 𝔹) ∈ Γ) (Fs_𝕆 : ∀ F ∈ Fs, Γ ⊩ ↑F ∷ 𝕆) :
   Γ ⊩ (case x of Fs) ∷ 𝕆
 | const_app_full (ys : list var) (c : const) :
-  list.map (λ y, y ∶ β c y) ys ⊩ c⟦ys…⟧ ∷ 𝕆
+  (ys.zip (δ c).ys).map (λ (yy' : var × var), yy'.1 ∶ β c yy'.2) ⊩ c⟦ys…⟧ ∷ 𝕆
 | const_app_part (ys : list var) (c : const) :
   ys [∶] 𝕆 ⊩ c⟦ys…, _⟧ ∷ 𝕆
 | var_app (x y : var) :
@@ -65,20 +65,20 @@ notation Γ ` ⊩ `:1 t := linear Γ t
   (x_𝕆 : (x ∶ 𝕆) ∈ Γ) (F_𝕆 : (y ∶ 𝕆) :: Γ ⊩ F ∷ 𝕆) :
   Γ ⊩ (y ≔ x[i]; inc y; F) ∷ 𝕆
 
-notation β `; ` Γ ` ⊩ `:1 t := linear β Γ t
+notation δ `; ` β `; ` Γ ` ⊩ `:1 t := linear δ β Γ t
 
-inductive linear_const (β : const → var → lin_type) (δ : program) : const → Prop
+inductive linear_const (δ : program) (β : const → var → lin_type) : const → Prop
 notation ` ⊩ `:1 c := linear_const c
 | const {c : const}
-  (F_𝕆 : β; (δ c).ys.map (λ y, y ∶ β c y) ⊩ (δ c).F ∷ 𝕆) :
+  (F_𝕆 : δ; β; (δ c).ys.map (λ y, y ∶ β c y) ⊩ (δ c).F ∷ 𝕆) :
   ⊩ c
 
-notation β `; ` δ ` ⊩ `:1 c := linear_const β δ c
+notation δ `; ` β ` ⊩ `:1 c := linear_const δ β c
 
 inductive linear_program (β : const → var → lin_type) : program → Prop
 notation ` ⊩ `:1 δ := linear_program δ
 | program {δ : program}
-  (const_typed : ∀ c : const, (β; δ ⊩ c)) :
+  (const_typed : ∀ c : const, (δ; β ⊩ c)) :
   ⊩ δ
 
 notation β ` ⊩ `:1 δ := linear_program β δ

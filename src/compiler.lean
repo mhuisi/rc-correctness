@@ -27,7 +27,7 @@ def C_app : list (var × lin_type) → fn_body → (var → lin_type) → fn_bod
     C_app xs (z ≔ e; dec_𝕆_var y F βₗ) βₗ
 | xs F βₗ := F
 
-def C (β : const → var → lin_type) : fn_body → (var → lin_type) → fn_body
+def C (δ : program) (β : const → var → lin_type) : fn_body → (var → lin_type) → fn_body
 | (ret x) βₗ := inc_𝕆_var x finset.empty (ret x) βₗ
 | (case x of Fs) βₗ :=
   case x of Fs.map_wf (λ F h, dec_𝕆 ((FV (case x of Fs)).sort var_le) (C F βₗ) βₗ)
@@ -37,16 +37,16 @@ def C (β : const → var → lin_type) : fn_body → (var → lin_type) → fn_
   else
     y ≔ x[i]; C F (βₗ[y ↦ 𝔹])
 | (z ≔ c⟦ys…⟧; F) βₗ := 
-  C_app (ys.map (λ y, ⟨y, β c y⟩)) (z ≔ c⟦ys…⟧; C F (βₗ[z ↦ 𝕆])) βₗ
+  C_app ((ys.zip (δ c).ys).map (λ ⟨y, y'⟩, ⟨y, β c y'⟩)) (z ≔ c⟦ys…⟧; C F (βₗ[z ↦ 𝕆])) βₗ
 | (z ≔ c⟦ys…, _⟧; F) βₗ := 
-  C_app (ys.map (λ y, ⟨y, β c y⟩)) (z ≔ c⟦ys…, _⟧; C F (βₗ[z ↦ 𝕆])) βₗ
+  C_app ((ys.zip (δ c).ys).map (λ ⟨y, y'⟩, ⟨y, β c y'⟩)) (z ≔ c⟦ys…, _⟧; C F (βₗ[z ↦ 𝕆])) βₗ
 | (z ≔ x⟦y⟧; F) βₗ := 
   C_app ([⟨x, 𝕆⟩, ⟨y, 𝕆⟩]) (z ≔ x⟦y⟧; C F (βₗ[z ↦ 𝕆])) βₗ   
 | (z ≔ ⟪ys⟫i; F) βₗ :=
   C_app (ys.map (λ y, ⟨y, 𝕆⟩)) (z ≔ ⟪ys⟫i; C F (βₗ[z ↦ 𝕆])) βₗ
 | F βₗ := F
 
-def C_prog (β : const → var → lin_type) (δ : program) (c : const) : fn := 
-  let (βₗ, f) := (β c, δ c) in ⟨f.ys, dec_𝕆 f.ys (C β f.F βₗ) βₗ⟩
+def C_prog (δ : program) (β : const → var → lin_type) (c : const) : fn := 
+  let (βₗ, f) := (β c, δ c) in ⟨f.ys, dec_𝕆 f.ys (C δ β f.F βₗ) βₗ⟩
 
 end rc_correctness
