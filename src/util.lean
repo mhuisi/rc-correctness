@@ -79,10 +79,8 @@ namespace list
     : contexts_aux pre xs = map (λ c : context α, ⟨pre ++ c.pre, c.x, c.post⟩) (contexts_aux [] xs) :=
   begin
     induction pre,
-    { simp only [nil_append],
-      have : (λ (c : context α), (⟨c.pre, c.x, c.post⟩ : context α)) = id,
-      { ext, cases x, refl },
-      rw [this, map_id] },
+    { have : (λ (c : context α), (⟨c.pre, c.x, c.post⟩ : context α)) = id, { ext, cases x, refl },
+      simp only [nil_append, this, map_id] },
     simp only [contexts_aux_pre_cons_elim _ _, pre_ih, cons_append, map_map]
   end
 
@@ -100,8 +98,7 @@ namespace list
     { contradiction },
     cases c_context,
     { rw c_context, refl },
-    rw ←xs_ih c_context,
-    simp only [cons_append, nil_append, append_assoc, concat_eq_append]
+    rw [←xs_ih c_context, concat_append]
   end
 
   lemma of_mem_contexts {α : Type*} {pre xs : list α} {c : context α} 
@@ -113,11 +110,9 @@ namespace list
     induction c_pre;
     unfold_coes,
     { simp only [nil_append, contexts_cons, mem_cons_self] },
-    simp only [contexts, contexts_aux, mem_cons_iff, cons_append, concat_eq_append, false_or, nil_append, false_and],
-    unfold_coes at c_pre_ih,
+    simp only [contexts, contexts_aux, mem_cons_iff, cons_append, concat_nil, false_or, false_and],
     rw [contexts_aux_pre_elim, mem_map],
-    use ⟨c_pre_tl, c_x, c_post⟩,
-    simpa
+    tauto
   end
 end list
 
@@ -132,72 +127,30 @@ namespace multiset
 end multiset
 
 namespace finset
-  def join {α : Type*} [decidable_eq α] (xs : list (finset α)) : finset α := xs.foldr (∪) ∅ 
+  def join {α : Type*} [decidable_eq α] (xs : finset (finset α)) : finset α := (xs.1.map val).join.to_finset
 
-  @[simp] theorem mem_join {α : Type*} [decidable_eq α] {x : α} {xs : list (finset α)} : x ∈ join xs ↔ ∃ S ∈ xs, x ∈ S :=
+  @[simp] theorem mem_join {α : Type*} [decidable_eq α] {x : α} {xs : finset (finset α)} : x ∈ join xs ↔ ∃ S ∈ xs, x ∈ S :=
   begin
-    apply iff.intro,
-    { intro h, 
-      induction xs;
-      unfold join at *,
-      { simp only [list.foldr_nil, not_mem_empty] at h,
-        contradiction },
-      { simp only [mem_union, list.foldr_cons] at h,
-        cases h, 
-        { exact ⟨xs_hd, ⟨or.inl rfl, h⟩⟩ },
-        { rcases xs_ih h with ⟨S, S_in_tl, x_in_S⟩,
-          exact ⟨S, ⟨or.inr S_in_tl, x_in_S⟩⟩ } } },
-    { intro h,
-      induction xs,
-      { simp only [list.not_mem_nil, exists_false, not_false_iff, exists_prop_of_false] at h,
-        contradiction },
-      { unfold join at *,
-        rcases h with ⟨S, S_in_hd_or_tl, x_in_S⟩,
-        simp only [mem_union, list.foldr_cons, list.mem_cons_iff] at *, 
-        cases S_in_hd_or_tl,
-        { rw S_in_hd_or_tl at x_in_S, 
-          exact or.inl x_in_S },
-        { exact or.inr (xs_ih ⟨S, S_in_hd_or_tl, x_in_S⟩) } } }
-    end
+    unfold join,
+    simp only [multiset.mem_to_finset, multiset.mem_join, mem_def.symm, exists_prop, multiset.mem_map],
+    split; intro h,
+    { rcases h with ⟨s, ⟨⟨S, S_in_xs, s_def⟩, x_in_s⟩⟩, 
+      rw [←s_def, ←mem_def] at x_in_s,
+      exact ⟨S, S_in_xs, x_in_s⟩ },
+    { tauto }
+  end
 
   @[simp] lemma erase_insert_eq_erase {α : Type*} [decidable_eq α] (s : finset α) (a : α) : 
     erase (insert a s) a = erase s a :=
-  begin
-    ext, 
-    simp only [mem_insert, mem_erase, and_or_distrib_left, not_and_self, false_or]
-  end
+  by { ext, simp only [mem_insert, mem_erase, and_or_distrib_left, not_and_self, false_or] }
 
   lemma erase_insert_eq_insert_erase {α : Type*} [decidable_eq α] {a b : α} (s : finset α) 
     (h : a ≠ b) :
     erase (insert a s) b = insert a (erase s b) :=
   begin
-    ext,
-    simp only [mem_insert, mem_erase, and_or_distrib_left],
-    apply iff.intro;
-    intro h₁;
-    cases h₁,
-    { exact or.inl h₁.right },
-    { exact or.inr h₁ },
-    { rw h₁, exact or.inl ⟨h, rfl⟩ },
-    { exact or.inr h₁ }
+    ext, simp only [mem_insert, mem_erase, and_or_distrib_left], 
+    split; intro h'; cases h'; cc
   end
-
-  lemma sort_empty {α : Type*} (r : α → α → Prop) [decidable_rel r]
-    [is_trans α r] [is_antisymm α r] [is_total α r] :
-    sort r ∅ = [] :=
-  begin
-    apply (multiset.coe_eq_zero (sort r ∅)).mp,
-    simp only [sort_eq, empty_val]
-  end
-
-  lemma sort_split {α : Type*} [decidable_eq α] (p : α → α → Prop) [decidable_rel p]
-    [is_trans α p] [is_antisymm α p] [is_total α p]
-    (a : α) (s : finset α) :
-    ∃ l r : list α, sort p (insert a s) = l ++ a :: r :=
-  list.mem_split ((mem_sort p).mpr (mem_insert_self a s))
-
-  lemma map_congr {α β : Type*} (f g : α ↪ β) {s : finset α} : (∀ x ∈ s, f.1 x = g.1 x) → map f s = map g s :=
-  λ h, eq_of_veq (multiset.map_congr h)
 end finset
 
 

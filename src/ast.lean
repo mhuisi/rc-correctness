@@ -81,7 +81,7 @@ def FV_expr : expr → finset var
 def FV : fn_body → finset var
 | (ret x) := {x}
 | (x ≔ e; F) := FV_expr e ∪ ((FV F).erase x)
-| (case x of Fs) := insert x (finset.join (Fs.map_wf (λ F h, FV F)))
+| (case x of Fs) := insert x (Fs.map_wf (λ F h, FV F)).to_finset.join
 | (inc x; F) := insert x (FV F)
 | (dec x; F) := insert x (FV F)
 

@@ -1,5 +1,6 @@
 import tactic
 import data.multiset
+import data.finset
 
 namespace list
   section inj_of_nodup_map_on
@@ -44,3 +45,8 @@ namespace multiset
     disjoint (s.filter p1) (s.filter p2) ↔ ∀ {x : α}, x ∈ s → p1 x → ¬p2 x :=
   quotient.induction_on s (@list.disjoint_filter_filter _ _ _ _ _)
 end multiset
+
+namespace finset
+  lemma map_congr {α β : Type*} (f g : α ↪ β) {s : finset α} : (∀ x ∈ s, f.1 x = g.1 x) → map f s = map g s :=
+  λ h, eq_of_veq (multiset.map_congr h)
+end finset
