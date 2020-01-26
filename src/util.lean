@@ -84,9 +84,9 @@ namespace list
     simp only [contexts_aux_pre_cons_elim _ _, pre_ih, cons_append, map_map]
   end
 
-  lemma contexts_nil (α : Type*) : contexts ([] : list α) = [] := rfl
+  @[simp] lemma contexts_nil (α : Type*) : contexts ([] : list α) = [] := rfl
 
-  lemma contexts_cons {α : Type*} (x : α) (xs : list α) 
+  @[simp] lemma contexts_cons {α : Type*} (x : α) (xs : list α) 
     : contexts (x :: xs) = ⟨[], x, xs⟩ :: contexts_aux [x] xs := rfl
 
   lemma of_mem_contexts_aux {α : Type*} {pre xs : list α} {c : context α} 
@@ -124,6 +124,10 @@ namespace multiset
   @[simp] lemma filter_false {α : Type*} {h : decidable_pred (λ a : α, false)} (s : multiset α) : 
     @filter α (λ _, false) h s = [] :=
   quot.induction_on s (λ l, congr_arg coe (list.filter_false l))
+
+  @[simp] lemma zero_union {α : Type*} [decidable_eq α] (s : multiset α) : 0 ∪ s = s := lattice.bot_sup_eq
+
+  @[simp] lemma union_zero {α : Type*} [decidable_eq α] (s : multiset α) : s ∪ 0 = s := lattice.sup_bot_eq
 end multiset
 
 namespace finset

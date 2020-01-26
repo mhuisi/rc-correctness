@@ -570,14 +570,26 @@ begin
   assumption
 end
 
-def O_𝔹 (β : const → var → lin_type) (c : const) (βₗ : var → lin_type) : list var → list var := 
-list.filter (λ yl, β c yl = 𝕆 ∧ βₗ yl = 𝔹) 
+def O_𝔹 (βₗ : var → lin_type) (yl_bls : list (var × lin_type)) : multiset var := 
+(yl_bls.filter (λ yl_bl : var × lin_type, yl_bl.2 = 𝕆 ∧ βₗ yl_bl.1 = 𝔹)).map prod.fst
 
--- problem: the variables that are being passed in and the variable names local to the function
--- are not the same. we need a translation function that preserves positions if we would like
--- to use this information.
-def O_𝕆 (β : const → var → lin_type) (c : const) (βₗ : var → lin_type) (F' : fn_body) (yls : list var) : list var :=
-sorry
+def O_𝕆 (βₗ : var → lin_type) (F' : fn_body) (yl_bls yr_brs : list (var × lin_type)) : multiset var :=
+(yl_bls.contexts.filter (λ yl_bl : list.context (var × lin_type), 
+  yl_bl.x.2 = 𝕆 ∧ βₗ yl_bl.x.1 = 𝕆 
+    ∧ (yl_bl.x.1 ∈ FV F' 
+      ∨ yl_bl.x.1 ∈ yl_bl.post.map prod.fst
+      ∨ yl_bl.x.1 ∈ yr_brs.map prod.fst
+      ∨ (yl_bl.x.1, 𝔹) ∈ yl_bls)))
+  .map (prod.fst ∘ list.context.x)
+
+def O (βₗ : var → lin_type) (F' : fn_body) (yl_bls yr_brs : list (var × lin_type)) : multiset var :=
+O_𝕆 βₗ F' yl_bls yr_brs ∪ O_𝔹 βₗ yl_bls
+
+-- not in use for now
+def B (βₗ : var → lin_type) (F' : fn_body) (yl_bls : list (var × lin_type)) : list var :=
+(yl_bls.contexts.filter (λ yl_bl : list.context (var × lin_type), 
+  yl_bl.x.2 = 𝔹 ∧ βₗ yl_bl.x.1 = 𝕆 ∧ yl_bl.x.1 ∉ FV F' ∧ (yl_bl.x.1, 𝔹) ∉ yl_bl.pre))
+  .map (prod.fst ∘ list.context.x)
 
 theorem C_app_rc_insertion_correctness {δ : program} {β : const → var → lin_type} {βₗ : var → lin_type}
   {y : var} {e : expr} {F : fn_body} {y𝕆 y𝔹 : multiset var} {Γ : list (var × lin_type)}
@@ -597,6 +609,13 @@ theorem C_app_rc_insertion_correctness {δ : program} {β : const → var → li
   (ty : δ; β; (Γ.map (λ (yτ : var × lin_type), yτ.1 ∶ yτ.2)) ⊩ e ∷ 𝕆)
   : (C_prog δ β; β; (y𝕆 {∶} 𝕆) + (y𝔹 {∶} 𝔹) ⊩ ↑(C_app Γ (y ≔ e; C δ β F (βₗ[y↦𝕆])) βₗ) ∷ 𝕆) :=
 begin
+  suffices generalized : ∀ yl_bls yr_brs : list (var × lin_type), Γ = yl_bls ++ yr_brs →
+    (C_prog δ β; β; (y𝕆 {∶} 𝕆) + (O βₗ F yl_bls yr_brs {∶} 𝕆) + (y𝔹 {∶} 𝔹) 
+      ⊩ ↑(C_app yr_brs (y ≔ e; dec_𝕆 (yl_bls.map prod.fst) (C δ β F (βₗ[y↦𝕆])) βₗ) βₗ) ∷ 𝕆),
+  { have := generalized list.nil Γ (list.nil_append Γ).symm,
+    simp only [O, O_𝕆, O_𝔹, dec_𝕆, list.contexts_nil, coe_nil_eq_zero, list.filter_nil,
+      list.foldr_nil, list.map, zero_union, map_zero, add_zero] at this, 
+    assumption },
   sorry
 end
 
