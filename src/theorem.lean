@@ -570,20 +570,52 @@ begin
   assumption
 end
 
-def O_𝔹 (βₗ : var → lin_type) (yl_bls : list (var × lin_type)) : multiset var := 
+def O_𝔹 (βₗ : var → lin_type) (yl_bls : list (var × lin_type)) : list var := 
 (yl_bls.filter (λ yl_bl : var × lin_type, yl_bl.2 = 𝕆 ∧ βₗ yl_bl.1 = 𝔹)).map prod.fst
 
-def O_𝕆 (βₗ : var → lin_type) (F' : fn_body) (yl_bls yr_brs : list (var × lin_type)) : multiset var :=
+def O_𝕆 (βₗ : var → lin_type) (F' : fn_body) (yl_bls yr_brs : list (var × lin_type)) : list var :=
 (yl_bls.contexts.filter (λ yl_bl : list.context (var × lin_type), 
   yl_bl.x.2 = 𝕆 ∧ βₗ yl_bl.x.1 = 𝕆 
     ∧ (yl_bl.x.1 ∈ FV F' 
-      ∨ yl_bl.x.1 ∈ yl_bl.post.map prod.fst
-      ∨ yl_bl.x.1 ∈ yr_brs.map prod.fst
+      ∨ (yl_bl.x.1, 𝕆) ∈ yl_bl.post ∨ (yl_bl.x.1, 𝔹) ∈ yl_bl.post
+      ∨ (yl_bl.x.1, 𝕆) ∈ yr_brs ∨ (yl_bl.x.1, 𝔹) ∈ yr_brs
       ∨ (yl_bl.x.1, 𝔹) ∈ yl_bls)))
   .map (prod.fst ∘ list.context.x)
 
-def O (βₗ : var → lin_type) (F' : fn_body) (yl_bls yr_brs : list (var × lin_type)) : multiset var :=
-O_𝕆 βₗ F' yl_bls yr_brs ∪ O_𝔹 βₗ yl_bls
+def O (βₗ : var → lin_type) (F' : fn_body) (yl_bls yr_brs : list (var × lin_type)) : list var :=
+O_𝕆 βₗ F' yl_bls yr_brs ++ O_𝔹 βₗ yl_bls
+
+lemma O_right_left_swap (βₗ : var → lin_type) (F' : fn_body) (y_b : var × lin_type) (yl_bls yr_brs : list (var × lin_type)) :
+  y_b.2 = 𝔹 ∨ βₗ y_b.1 = 𝕆 ∧ y_b.1 ∉ FV F' ∧ (y_b.1, 𝕆) ∉ yr_brs ∧ (y_b.1, 𝔹) ∉ yr_brs ∧ (y_b.1, 𝔹) ∉ yl_bls →
+  O βₗ F' yl_bls (y_b :: yr_brs) = O βₗ F' (yl_bls.concat y_b) yr_brs :=
+begin
+  intro h, 
+  unfold O,
+  have : O_𝔹 βₗ (list.concat yl_bls y_b) = O_𝔹 βₗ yl_bls,
+  { unfold O_𝔹, congr' 1, 
+    have : ¬(y_b.snd = 𝕆 ∧ βₗ (y_b.fst) = 𝔹), { finish },
+    rw [list.concat_eq_append, list.filter_append, @list.filter_cons_of_neg _ _ _ y_b list.nil this, list.filter_nil, list.append_nil] },
+  rw [this, list.append_right_inj], 
+  unfold O_𝕆, rw list.contexts_concat, 
+  simp only [list.filter_of_map, list.mem_append, list.map_append, list.filter_append, list.mem_cons_iff,
+    list.mem_singleton, list.map_map, list.concat_eq_append], 
+  have : ((prod.fst ∘ list.context.x) ∘ λ c : list.context (var × lin_type), ⟨c.pre, c.x, c.post ++ [y_b]⟩) 
+    = prod.fst ∘ list.context.x, { refl },
+  rw this, 
+  have : ∀ xs ys zs : list var, zs = [] → xs = ys → xs = ys ++ zs, 
+  { intros xs ys zs h1 h2, rw [h1, h2, list.append_nil] },
+  apply this,
+  swap,
+  { congr' 1, apply list.filter_congr, intros c h', 
+    simp only [list.mem_append, function.comp_app, list.mem_singleton],
+    tauto },
+  { rw [list.map_eq_nil, list.filter_eq_nil], 
+    simp only [list.not_mem_nil, false_or, not_and, forall_eq, list.mem_singleton],
+    cases y_b, dsimp at *, push_neg, intros h1 h2,
+    cases h, { rw h at h1, contradiction },
+    rcases h with ⟨h3, h4, h5, h6, h7⟩, refine ⟨h4, h5, h6, h7, _⟩, 
+    intro h', cases h', contradiction },
+end
 
 -- not in use for now
 def B (βₗ : var → lin_type) (F' : fn_body) (yl_bls : list (var × lin_type)) : list var :=
@@ -614,9 +646,19 @@ begin
       ⊩ ↑(C_app yr_brs (y ≔ e; dec_𝕆 (yl_bls.map prod.fst) (C δ β F (βₗ[y↦𝕆])) βₗ) βₗ) ∷ 𝕆),
   { have := generalized list.nil Γ (list.nil_append Γ).symm,
     simp only [O, O_𝕆, O_𝔹, dec_𝕆, list.contexts_nil, coe_nil_eq_zero, list.filter_nil,
-      list.foldr_nil, list.map, zero_union, map_zero, add_zero] at this, 
+      list.foldr_nil, list.map, zero_union, map_zero, add_zero, list.append_nil] at this, 
     assumption },
-  sorry
+  intros yl_bls yr_brs Γ_def,
+  induction yr_brs generalizing yl_bls,
+  { sorry },
+  cases yr_brs_hd with yr br,
+  cases br,
+  { unfold C_app,
+    split_ifs, swap, { contradiction }, 
+    unfold inc_𝕆_var,
+    split_ifs, 
+    { simp at h_1,
+      push_neg at h_1, sorry }, sorry }, sorry
 end
 
 theorem rc_insertion_correctness' {δ : program} {β : const → var → lin_type} {c : const}

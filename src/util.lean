@@ -67,7 +67,7 @@ namespace list
 
   def contexts {α : Type*} (xs : list α) : list (context α) := contexts_aux [] xs
 
-  lemma contexts_aux_pre_cons_elim {α : Type*} (p : α) (pre xs : list α)
+  @[simp] lemma contexts_aux_pre_cons_elim {α : Type*} (p : α) (pre xs : list α)
     : contexts_aux (p :: pre) xs = map (λ c : context α, ⟨p :: c.pre, c.x, c.post⟩) (contexts_aux pre xs) :=
   begin
     induction xs generalizing pre, 
@@ -88,6 +88,22 @@ namespace list
 
   @[simp] lemma contexts_cons {α : Type*} (x : α) (xs : list α) 
     : contexts (x :: xs) = ⟨[], x, xs⟩ :: contexts_aux [x] xs := rfl
+
+  lemma contexts_append {α : Type*} (xs ys : list α) 
+    : contexts (xs ++ ys) = (contexts xs).map (λ c, ⟨c.pre, c.x, c.post ++ ys⟩) 
+        ++ (contexts ys).map (λ c, ⟨xs ++ c.pre, c.x, c.post⟩) :=
+  begin
+    induction xs,
+    { simp only [contexts, contexts_aux, map, nil_append],
+      rw map_id', intro x, cases x, refl },
+    have : ∀ xs : list α, contexts_aux nil xs = contexts xs, from λ xs, rfl,
+    simp [this, xs_ih]
+  end
+
+  lemma contexts_concat {α : Type*} (xs : list α) (x : α)
+    : contexts (xs.concat x) 
+      = ((contexts xs).map (λ c : context α, (⟨c.pre, c.x, c.post.concat x⟩ : context α))).concat ⟨xs, x, []⟩ :=
+  by simp only [contexts_append, contexts_aux, list.append_nil, list.contexts_cons, list.map, list.concat_eq_append]
 
   lemma of_mem_contexts_aux {α : Type*} {pre xs : list α} {c : context α} 
     : c ∈ contexts_aux pre xs → pre ++ xs = ↑c :=
