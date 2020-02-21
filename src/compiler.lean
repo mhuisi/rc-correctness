@@ -18,6 +18,10 @@ xs.foldr (λ x acc, dec_𝕆_var x acc βₗ) F
 def dec_𝕆' (xs : list var) (F : fn_body) (βₗ : var → lin_type) : fn_body := 
 xs.foldr (λ x acc, if βₗ x = 𝕆 ∧ x ∉ FV F then dec x; acc else acc) F
 
+def dec_𝕆'' (xs : list var) (F : fn_body) (βₗ : var → lin_type) : fn_body := 
+(xs.contexts.filter (λ x : list.context var, βₗ x.x = 𝕆 ∧ x.x ∉ FV F ∧ x.x ∉ x.pre))
+  .foldr (λ (x : list.context var) acc, dec x.x; acc) F
+
 def C_app : list (var × lin_type) → fn_body → (var → lin_type) → fn_body
 | [] (z ≔ e; F) βₗ := z ≔ e; F
 | ((y, t)::xs) (z ≔ e; F) βₗ := 

@@ -617,6 +617,34 @@ begin
     intro h', cases h', contradiction },
 end
 
+lemma dec_𝕆_eq_dec_𝕆'' (ys : list var) (F : fn_body) (βₗ : var → lin_type) : dec_𝕆 ys F βₗ = dec_𝕆'' ys F βₗ :=
+begin
+  unfold dec_𝕆 dec_𝕆'', 
+  induction ys,
+  { simp only [list.contexts_nil, list.filter_nil, list.foldr_nil] },
+  simp only [dec_𝕆_var, list.foldr_cons, list.contexts_cons, list.contexts_aux_pre_cons_elim],
+  split_ifs,
+  { rw list.filter_cons_of_pos,
+    { simp only [list.foldr_cons], refine ⟨rfl, _⟩,
+      have e1 : ((λ x : list.context var, «dec» (x.x)) ∘ λ c : list.context var, ⟨ys_hd :: c.pre, c.x, c.post⟩) 
+        = (λ x, «dec» (x.x)), from rfl,
+      -- using the have trick of e1 for the 2nd equality leads to a weird error when rewriting :(
+      rw [list.filter_of_map, list.foldr_map, e1,
+        list.filter_congr (λ (x : list.context var) x_in_s, iff.refl (βₗ (x.x) = 𝕆 ∧ x.x ∉ FV F ∧ x.x ∉ list.cons ys_hd x.pre))],
+      clear e1,
+      simp only [list.mem_cons_iff],
+      push_neg, 
+      have : ∀ x ∈ list.contexts ys_tl, βₗ ((x : list.context var).x) = 𝕆 ∧ x.x ∉ FV F ∧ x.x ≠ ys_hd ∧ x.x ∉ x.pre
+        ↔ βₗ (x.x) = 𝕆 ∧ x.x ∉ FV F ∧ x.x ∉ x.pre, 
+      { intros c c_context,
+        split, { tauto },
+        rintro ⟨x_𝕆, x_notin_FV, x_notin_pre⟩,
+        refine ⟨x_𝕆, x_notin_FV, _, x_notin_pre⟩,
+        intro x_def, rw x_def at *, clear x_def,
+         } },
+    { sorry } }
+end
+
 -- not in use for now
 def B (βₗ : var → lin_type) (F' : fn_body) (yl_bls : list (var × lin_type)) : list var :=
 (yl_bls.contexts.filter (λ yl_bl : list.context (var × lin_type), 
@@ -658,7 +686,7 @@ begin
     unfold inc_𝕆_var,
     split_ifs, 
     { simp at h_1,
-      push_neg at h_1, sorry }, sorry }, sorry
+      push_neg at h_1,  }, sorry }, sorry
 end
 
 theorem rc_insertion_correctness' {δ : program} {β : const → var → lin_type} {c : const}
