@@ -117,8 +117,11 @@ namespace list
     rw [←xs_ih c_context, concat_append]
   end
 
-  lemma of_mem_contexts {α : Type*} {pre xs : list α} {c : context α} 
+  lemma of_mem_contexts {α : Type*} {xs : list α} {c : context α} 
     : c ∈ contexts xs → xs = ↑c := of_mem_contexts_aux
+
+  lemma mem_of_mem_contexts {α : Type*} {c : context α} {xs : list α}
+    : c ∈ contexts xs → c.x ∈ xs := λ h, by { rw of_mem_contexts h, unfold_coes, simp }
 
   lemma mem_contexts_self {α : Type*} (c : context α) : c ∈ contexts (↑c : list α) :=
   begin

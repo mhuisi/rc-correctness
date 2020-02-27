@@ -89,55 +89,27 @@ section FV_C
     exact insert_eq_of_mem h
   end
 
-  lemma FV_sub_FV_dec_𝕆 (ys : list var) (F : fn_body) (βₗ : var → lin_type) 
-    : FV F ⊆ FV (dec_𝕆 ys F βₗ) :=
-  begin
-    apply subset_iff.mpr,
-    intros x h,
-    unfold dec_𝕆 dec_𝕆_var,
-    induction ys,
-    { simpa only [list.foldr_nil] },
-    simp only [list.foldr_cons],
-    split_ifs,
-    { simp only [FV, mem_insert],
-      exact or.inr ys_ih },
-    { exact ys_ih }
-  end
-
   lemma FV_dec_𝕆_filter (ys : list var) (F : fn_body) (βₗ : var → lin_type) 
     : FV (dec_𝕆 ys F βₗ) = ys.to_finset.filter (λ y, βₗ y = 𝕆 ∧ y ∉ FV F) ∪ FV F :=
   begin
-    induction ys,
-    { simp only [dec_𝕆, filter_empty, finset.empty_union, list.to_finset_nil, list.foldr_nil] },
-    simp only [dec_𝕆, dec_𝕆_var, filter_insert, list.foldr_cons, list.to_finset_cons] at *,
-    split_ifs;
-    try { simp only [FV, insert_union] }, 
-    { rw ys_ih },
-    { simp only [not_and, not_not] at h_1,
-      have ys_hd_in_FV, from h_1 h.left,
-      have : 
-        FV (list.foldr (λ (x : var) (acc : fn_body), 
-          ite (βₗ x = 𝕆 ∧ x ∉ FV acc) (dec x; acc) acc) 
-          F ys_tl) = FV (dec_𝕆 ys_tl F βₗ), from rfl,
-      rw this at h,
-      exact absurd (subset_iff.mp (FV_sub_FV_dec_𝕆 ys_tl F βₗ) ys_hd_in_FV) h.right },
-    { simp only [not_and, not_not] at h,
-      have ys_hd_in_FV, from h h_1.left,
-      rw ys_ih at *,
-      rw insert_eq_of_mem ys_hd_in_FV },
+    induction ys generalizing F,
+    { simp only [dec_𝕆, filter_empty, finset.empty_union, list.to_finset_nil, list.foldl_nil] },
+    simp only [dec_𝕆, dec_𝕆_var, filter_insert, list.foldl_cons, list.to_finset_cons] at *,
+    split_ifs, 
+    { rw ys_ih, ext, 
+      simp only [FV, mem_union, mem_filter, mem_insert, insert_union, union_insert, list.mem_to_finset], tauto },
     { rw ys_ih }
   end
+
+  lemma FV_sub_FV_dec_𝕆 (ys : list var) (F : fn_body) (βₗ : var → lin_type) 
+    : FV F ⊆ FV (dec_𝕆 ys F βₗ) := by { rw FV_dec_𝕆_filter, exact finset.subset_union_right _ _ }
 
   lemma FV_dec_𝕆_sub_vars_FV (vars : list var) (F : fn_body) (βₗ : var → lin_type) 
   : FV (dec_𝕆 vars F βₗ) ⊆ vars.to_finset ∪ FV F :=
   begin
     simp only [FV_dec_𝕆_filter, subset_iff, mem_union, mem_filter, list.mem_to_finset], 
-    intros x h,
-    cases h,
-    { exact or.inl h.left },
-    { exact or.inr h }
-  end
-                           
+    tauto
+  end                      
 
   lemma FV_dec_eq_FV {e : expr} {x z : var} {F : fn_body} 
     (h : x ∈ FV_expr e ∪ erase (FV F) z) : 
@@ -433,22 +405,12 @@ lemma dec_𝕆_eq_dec_𝕆'_of_nodup {ys : list var} (F : fn_body) (βₗ : var 
   (d : list.nodup ys) : dec_𝕆 ys F βₗ = dec_𝕆' ys F βₗ :=
 begin
   unfold dec_𝕆 dec_𝕆_var dec_𝕆',
-  induction ys,
-  { simp only [list.foldr_nil] },
+  induction ys generalizing F,
+  { simp only [list.foldl_nil] },
   cases list.nodup_cons.mp d with ys_hd_not_in_ys_tl nodup_ys_tl,
-  simp only [list.foldr_cons],
-  split_ifs,
-  { exact ⟨rfl, ys_ih nodup_ys_tl⟩ },
-  { simp only [not_and, not_not] at h_1,
-    have g1, from h.right,
-    have g2, from finset.subset_iff.mp (FV_sub_FV_dec_𝕆 ys_tl F βₗ) (h_1 h.left),
-    contradiction },
-  { simp only [not_and, not_not] at h,
-    have g1, from h_1.right,
-    have g2, from finset.subset_iff.mp (FV_dec_𝕆_sub_vars_FV ys_tl F βₗ) (h h_1.left),
-    simp only [list.mem_to_finset, finset.mem_union] at g2,
-    cases g2; contradiction },
-  { exact ys_ih nodup_ys_tl }
+  simp only [list.foldl_cons],
+  split_ifs; rw ys_ih nodup_ys_tl,
+  apply list.foldl_ext, intros F x x_in_tl, simp only [FV, finset.mem_insert], split_ifs; cc
 end
 
 open multiset (hiding coe_sort)
@@ -467,15 +429,24 @@ begin
     exact ⟨λ h', h'.elim (λ h'', or.inl h''.right) (λ h'', or.inr h''), 
            λ h', h'.elim (λ h'', f y y_in_ys' h'') (λ h'', or.inr h'')⟩ },
   rw dec_𝕆_eq_dec_𝕆'_of_nodup F βₗ d,
-  induction ys generalizing y𝕆 y𝔹,
-  { rw [dec_𝕆', list.foldr_nil], 
+  rw dec_𝕆', rw ←list.foldr_reverse, 
+  have : (↑ys : multiset var) = ↑(list.reverse ys),
+  { rw coe_eq_coe, exact (list.reverse_perm _).symm },
+  rw this at ys_sub_vars, clear this,
+  have : ∀ y ∈ y𝕆, y ∉ ys ∨ y ∈ FV F ↔ y ∉ list.reverse ys ∨ y ∈ FV F,
+  { intros y y_in_𝕆, rw list.mem_reverse },
+  rw filter_congr this at h, clear this,
+  replace d := list.nodup_reverse.mpr d,
+  generalize eq : list.reverse ys = ys', rw eq at *, clear eq, clear ys,
+  induction ys' with ys_hd ys_tl ys_ih generalizing y𝕆 y𝔹,
+  { rw [list.foldr_nil], 
     simp only [list.not_mem_nil, true_or, not_false_iff, filter_true] at h, 
     assumption },
   cases list.nodup_cons.mp d with ys_hd_not_in_ys_tl nodup_ys_tl, 
   rw ←cons_coe at ys_sub_vars,
   simp only [cons_subset, mem_add] at ys_sub_vars,
   cases ys_sub_vars with ys_hd_def ys_tl_sub_vars,
-  rw [dec_𝕆', list.foldr_cons], 
+  rw [list.foldr_cons], 
   split_ifs,
   { cases ys_hd_def, swap,
     { rw y𝔹_𝔹 ys_hd ys_hd_def at h_1,
@@ -486,6 +457,13 @@ begin
     apply linear.dec,
     apply ys_ih,
     { assumption },
+    { simp only [y𝕆_def, mem_cons] at y𝕆_𝕆,
+      intros y y_in_y𝕆',
+      exact y𝕆_𝕆 y (or.inr y_in_y𝕆') },
+    { assumption }, 
+    { simp only [y𝕆_def, nodup_cons] at nd_y𝕆,
+      exact nd_y𝕆.right },
+    { assumption },
     { rw y𝕆_def at ys_tl_sub_vars,
       rw subset_iff at ys_tl_sub_vars ⊢,
       intros x x_in_tl,
@@ -495,13 +473,6 @@ begin
       { contradiction },
       { exact mem_add.mpr (or.inl this) },
       { exact mem_add.mpr (or.inr this) } },
-    { simp only [y𝕆_def, mem_cons] at y𝕆_𝕆,
-      intros y y_in_y𝕆',
-      exact y𝕆_𝕆 y (or.inr y_in_y𝕆') },
-    { assumption }, 
-    { simp only [y𝕆_def, nodup_cons] at nd_y𝕆,
-      exact nd_y𝕆.right },
-    { assumption },
     { rw y𝕆_def at h nd_y𝕆,
       rw filter_cons_of_neg at h, swap,
       { simp, exact h_1.right },
@@ -617,32 +588,34 @@ begin
     intro h', cases h', contradiction },
 end
 
+lemma dec_𝕆''_cons (y : var) (ys : list var) (F : fn_body) (βₗ : var → lin_type) 
+  : dec_𝕆'' (y :: ys) F βₗ = 
+      list.foldl (λ F (c : list.context var), dec c.x; F) (if βₗ y = 𝕆 ∧ y ∉ FV F then dec y; F else F)
+        (list.filter (λ c, βₗ (c.x) = 𝕆 ∧ c.x ∉ FV F ∧ c.x ∉ (y :: c.pre : list var))
+          (list.contexts ys)) :=
+begin
+  unfold dec_𝕆'', rw [list.contexts_cons, list.contexts_aux_pre_cons_elim],
+  split_ifs,
+  { rw [list.filter_cons_of_pos, list.foldl_cons, list.filter_of_map, list.foldl_map], refl, tauto },
+  { rw [list.filter_cons_of_neg, list.filter_of_map, list.foldl_map], refl, tauto }
+end
+
 lemma dec_𝕆_eq_dec_𝕆'' (ys : list var) (F : fn_body) (βₗ : var → lin_type) : dec_𝕆 ys F βₗ = dec_𝕆'' ys F βₗ :=
 begin
-  unfold dec_𝕆 dec_𝕆'', 
-  induction ys,
-  { simp only [list.contexts_nil, list.filter_nil, list.foldr_nil] },
-  simp only [dec_𝕆_var, list.foldr_cons, list.contexts_cons, list.contexts_aux_pre_cons_elim],
-  split_ifs,
-  { rw list.filter_cons_of_pos,
-    { simp only [list.foldr_cons], refine ⟨rfl, _⟩,
-      have e1 : ((λ x : list.context var, «dec» (x.x)) ∘ λ c : list.context var, ⟨ys_hd :: c.pre, c.x, c.post⟩) 
-        = (λ x, «dec» (x.x)), from rfl,
-      -- using the have trick of e1 for the 2nd equality leads to a weird error when rewriting :(
-      rw [list.filter_of_map, list.foldr_map, e1,
-        list.filter_congr (λ (x : list.context var) x_in_s, iff.refl (βₗ (x.x) = 𝕆 ∧ x.x ∉ FV F ∧ x.x ∉ list.cons ys_hd x.pre))],
-      clear e1,
-      simp only [list.mem_cons_iff],
-      push_neg, 
-      have : ∀ x ∈ list.contexts ys_tl, βₗ ((x : list.context var).x) = 𝕆 ∧ x.x ∉ FV F ∧ x.x ≠ ys_hd ∧ x.x ∉ x.pre
-        ↔ βₗ (x.x) = 𝕆 ∧ x.x ∉ FV F ∧ x.x ∉ x.pre, 
-      { intros c c_context,
-        split, { tauto },
-        rintro ⟨x_𝕆, x_notin_FV, x_notin_pre⟩,
-        refine ⟨x_𝕆, x_notin_FV, _, x_notin_pre⟩,
-        intro x_def, rw x_def at *, clear x_def,
-         } },
-    { sorry } }
+  unfold dec_𝕆, 
+  induction ys generalizing F,
+  { simp only [dec_𝕆'', list.contexts_nil, list.filter_nil, list.foldl_nil] },
+  rw dec_𝕆''_cons,
+  simp only [dec_𝕆_var, list.foldl_cons],
+  unfold dec_𝕆_var dec_𝕆'' at ys_ih,
+  split_ifs; rw ys_ih,
+  { unfold FV, congr, ext, rw [list.mem_cons_iff, finset.mem_insert], tauto },
+  { congr, ext, 
+    rw list.mem_cons_iff, push_neg at h ⊢, 
+    split, swap, { tauto },
+    rintro ⟨x_𝕆, x_notin_FV, x_notin_pre⟩,
+    refine ⟨x_𝕆, x_notin_FV, _, x_notin_pre⟩,
+    intro x_def, rw x_def at *, tauto }
 end
 
 -- not in use for now
