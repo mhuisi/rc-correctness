@@ -544,6 +544,21 @@ end
 def O_𝔹 (βₗ : var → lin_type) (yl_bls : list (var × lin_type)) : list var := 
 (yl_bls.filter (λ yl_bl : var × lin_type, yl_bl.2 = 𝕆 ∧ βₗ yl_bl.1 = 𝔹)).map prod.fst
 
+lemma O_𝔹_left_concat {βₗ : var → lin_type} {y_b : var × lin_type} {yl_bls : list (var × lin_type)}
+  : y_b.2 = 𝕆 ∧ βₗ y_b.1 = 𝔹 → O_𝔹 βₗ (yl_bls.concat y_b) = (O_𝔹 βₗ yl_bls).concat y_b.1 :=
+begin
+  intro h, simp only [O_𝔹, list.map_append, list.filter_append, list.concat_eq_append],
+  rw list.filter_cons_of_pos, simp only [list.filter_nil, list.map], assumption
+end
+
+lemma O_𝔹_left_concat_elim {βₗ : var → lin_type} {y_b : var × lin_type} {yl_bls : list (var × lin_type)}
+  : y_b.2 = 𝔹 ∨ βₗ y_b.1 = 𝕆 → O_𝔹 βₗ (yl_bls.concat y_b) = O_𝔹 βₗ yl_bls :=
+begin
+  intro h, simp only [O_𝔹, list.map_append, list.filter_append, list.concat_eq_append],
+  rw list.filter_cons_of_neg, simp only [list.filter_nil, list.append_nil, list.map], 
+  push_neg, rwa [not_𝔹_iff_𝕆, not_𝕆_iff_𝔹]
+end
+
 def O_𝕆 (βₗ : var → lin_type) (F' : fn_body) (yl_bls yr_brs : list (var × lin_type)) : list var :=
 (yl_bls.contexts.filter (λ yl_bl : list.context (var × lin_type), 
   yl_bl.x.2 = 𝕆 ∧ βₗ yl_bl.x.1 = 𝕆 
@@ -553,8 +568,25 @@ def O_𝕆 (βₗ : var → lin_type) (F' : fn_body) (yl_bls yr_brs : list (var 
       ∨ (yl_bl.x.1, 𝔹) ∈ yl_bls)))
   .map (prod.fst ∘ list.context.x)
 
+lemma O_𝕆_left_concat {βₗ : var → lin_type} {F' : fn_body} {y_b : var × lin_type} {yl_bls yr_brs : list (var × lin_type)}
+  : y_b.2 = 𝕆 ∧ βₗ y_b.1 = 𝕆 ∧ (y_b.1 ∈ FV F' ∨ (y_b.1, 𝕆) ∈ yr_brs ∨ (y_b.1, 𝔹) ∈ yr_brs ∨ (y_b.1, 𝔹) ∈ yl_bls) ∧ (y_b.1, 𝔹) ∉ yl_bls
+    → O_𝕆 βₗ F' (yl_bls.concat y_b) yr_brs = (O_𝕆 βₗ F' yl_bls yr_brs).concat y_b.1 :=
+begin
+  rintro ⟨b_𝕆, y_𝕆, h, ni_𝔹⟩, unfold O_𝕆, 
+  rw list.contexts_concat, conv { to_lhs, congr, skip, congr, skip, rw list.concat_eq_append },
+  rw [list.filter_append, list.filter_cons_of_pos, list.filter_nil, list.map_append, list.map_cons], swap, { tauto },
+  unfold list.map, rw [←list.concat_eq_append, list.filter_of_map, list.map_map],
+  unfold function.comp, congr' 2, apply list.filter_congr, simp only [list.mem_append, list.mem_singleton, list.concat_eq_append],
+  intros c c_context, split, swap, { tauto },
+  rintros ⟨c2_𝕆, c1_𝕆, h'⟩, repeat { cases h' }, all_goals { tauto }
+end
+
 def O (βₗ : var → lin_type) (F' : fn_body) (yl_bls yr_brs : list (var × lin_type)) : list var :=
 O_𝕆 βₗ F' yl_bls yr_brs ++ O_𝔹 βₗ yl_bls
+
+lemma O_left_concat {βₗ : var → lin_type} {F' : fn_body} {y_b : var × lin_type} {yl_bls yr_brs : list (var × lin_type)}
+  
+  : O βₗ F' (yl_bls.concat y_b) yr_brs = (O βₗ F' yl_bls yr_brs).concat y_b.1
 
 lemma O_right_left_swap (βₗ : var → lin_type) (F' : fn_body) (y_b : var × lin_type) (yl_bls yr_brs : list (var × lin_type)) :
   y_b.2 = 𝔹 ∨ βₗ y_b.1 = 𝕆 ∧ y_b.1 ∉ FV F' ∧ (y_b.1, 𝕆) ∉ yr_brs ∧ (y_b.1, 𝔹) ∉ yr_brs ∧ (y_b.1, 𝔹) ∉ yl_bls →
@@ -667,6 +699,11 @@ begin
   { unfold C_app,
     split_ifs, swap, { contradiction }, 
     unfold inc_𝕆_var,
+    have : list.filter (λ (yl_bl : var × lin_type), yl_bl.snd = 𝔹) yl_bls
+      = list.filter (λ (yl_bl : var × lin_type), yl_bl.snd = 𝔹) (yl_bls.concat (yr, 𝕆)),
+    { rw [list.concat_eq_append, list.filter_append, list.filter_cons_of_neg, list.filter_nil, list.append_nil], 
+      contradiction },
+    rw this,
     split_ifs, 
     { rw FV_dec_𝕆_filter at h_1, simp at h_1, push_neg at h_1, rw FV_C_eq_FV at h_1,
       rw O_right_left_swap, swap,
@@ -674,13 +711,41 @@ begin
         refine ⟨h_1.1, h_1.2.2.1, h_1.2.1 𝕆, h_1.2.1 𝔹, _⟩, 
         rcases h_1 with ⟨a, b, c, d⟩,
         repeat { cases d }, all_goals { contradiction } },
-      have : list.filter (λ (yl_bl : var × lin_type), yl_bl.snd = 𝔹) yl_bls
-        = list.filter (λ (yl_bl : var × lin_type), yl_bl.snd = 𝔹) (yl_bls.concat (yr, 𝕆)),
-      { rw [list.concat_eq_append, list.filter_append, list.filter_cons_of_neg, list.filter_nil, list.append_nil], 
-        contradiction },
-      rw this,
       apply yr_brs_ih,
-      simpa }, sorry }, sorry
+      simpa },
+    { push_neg at h_1, rw FV_dec_𝕆_filter at h_1, simp [FV_C_eq_FV] at h_1, 
+      apply linear.inc_𝕆,
+      { sorry },
+      rw ←cons_add, rw ←add_cons, rw ←map_cons _ yr,
+      have : cons yr ↑(O βₗ F yl_bls ((yr, 𝕆) :: yr_brs_tl)) = ↑(O βₗ F (yl_bls.concat (yr, 𝕆)) yr_brs_tl),
+      { unfold O, rw [←coe_add, ←coe_add], 
+        have : O_𝕆 βₗ F yl_bls ((yr, 𝕆) :: yr_brs_tl) = O_𝕆 βₗ F yl_bls yr_brs_tl,
+        { /- unfold O_𝕆, congr' 1, apply list.filter_congr, intros c c_context,
+          simp, split, swap, { /-tauto-/ sorry },
+          rintro ⟨a, b, h'⟩, refine ⟨a, b, _⟩, repeat { cases h' }, any_goals { tauto },
+          -- tauto will timeout on this terrible mess. abandon all hope ye who enter here.
+          { repeat { cases h_1 <|> cases h_1_w }, { contradiction }, { exact or.inr (or.inr (or.inr (or.inl h_1_h))) },
+            { exact or.inr (or.inr (or.inr (or.inr (or.inl h_1_h)))) }, { exact or.inl h_1 },
+            { exact or.inr (or.inr (or.inr (or.inr (or.inr h_1_left)))) } } -/ sorry },
+        rw this,
+        by_cases βₗ yr = 𝕆,
+        { have : O_𝕆 βₗ F (list.concat yl_bls (yr, 𝕆)) yr_brs_tl = (O_𝕆 βₗ F yl_bls yr_brs_tl).concat yr,
+          { /-unfold O_𝕆, rw list.contexts_concat, 
+            conv { to_lhs, congr, skip, congr, skip, rw list.concat_eq_append },
+            rw [list.filter_append, list.filter_cons_of_pos, list.filter_nil, list.map_append, list.map_cons], swap,
+            { dsimp, refine ⟨rfl, h, _⟩, simp, repeat { cases h_1 <|> cases h_1_w },
+              { contradiction }, { exact or.inr (or.inl h_1_h) }, { exact or.inr (or.inr (or.inl h_1_h)) }, 
+              { exact or.inl h_1 }, { exact or.inr (or.inr (or.inr h_1_left)) } },
+            unfold list.map, dsimp, rw [←list.concat_eq_append, list.filter_of_map, list.map_map],
+            unfold function.comp, dsimp, congr' 2, apply list.filter_congr, simp, 
+            intros c c_context, split, swap, { /-tauto-/ sorry }, rintro ⟨a, b, h'⟩, refine ⟨a, b, _⟩, repeat { cases h' },
+            any_goals { tauto }, 
+            { repeat { cases h_1 <|> cases h_1_w }, { contradiction }, { exact or.inr (or.inr (or.inr (or.inl h_1_h))) },
+            { exact or.inr (or.inr (or.inr (or.inr (or.inl h_1_h)))) }, { exact or.inl h_1 },
+            { exact or.inr (or.inr (or.inr (or.inr (or.inr h_1_left)))) } } -/ sorry },
+          rw this,
+          }, }
+       } }, sorry }
 end
 
 theorem rc_insertion_correctness' {δ : program} {β : const → var → lin_type} {c : const}
