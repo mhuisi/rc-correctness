@@ -618,6 +618,16 @@ begin
     intro x_def, rw x_def at *, tauto }
 end
 
+lemma dec_𝕆_concat_elim {ys : list var} {y : var} {F : fn_body} {βₗ : var → lin_type}
+  : βₗ y = 𝔹 ∨ y ∈ FV F ∨ y ∈ ys → dec_𝕆 (ys.concat y) F βₗ = dec_𝕆 ys F βₗ :=
+begin
+  intro h,
+  simp only [dec_𝕆_eq_dec_𝕆'', dec_𝕆'', list.contexts_concat],
+  simp only [list.filter_append, list.foldl_append, list.concat_eq_append],
+  rw list.filter_cons_of_neg, swap, { push_neg, rwa not_𝕆_iff_𝔹 },
+  rw [list.filter_of_map, list.foldl_map], dsimp, unfold function.comp
+end
+
 -- not in use for now
 def B (βₗ : var → lin_type) (F' : fn_body) (yl_bls : list (var × lin_type)) : list var :=
 (yl_bls.contexts.filter (λ yl_bl : list.context (var × lin_type), 
@@ -644,7 +654,7 @@ theorem C_app_rc_insertion_correctness {δ : program} {β : const → var → li
 begin
   suffices generalized : ∀ yl_bls yr_brs : list (var × lin_type), Γ = yl_bls ++ yr_brs →
     (C_prog δ β; β; (y𝕆 {∶} 𝕆) + (O βₗ F yl_bls yr_brs {∶} 𝕆) + (y𝔹 {∶} 𝔹) 
-      ⊩ ↑(C_app yr_brs (y ≔ e; dec_𝕆 (yl_bls.map prod.fst) (C δ β F (βₗ[y↦𝕆])) βₗ) βₗ) ∷ 𝕆),
+      ⊩ ↑(C_app yr_brs (y ≔ e; dec_𝕆 ((yl_bls.filter (λ (yl_bl : var × lin_type), yl_bl.2 = 𝔹)).map prod.fst) (C δ β F (βₗ[y↦𝕆])) βₗ) βₗ) ∷ 𝕆),
   { have := generalized list.nil Γ (list.nil_append Γ).symm,
     simp only [O, O_𝕆, O_𝔹, dec_𝕆, list.contexts_nil, coe_nil_eq_zero, list.filter_nil,
       list.foldr_nil, list.map, zero_union, map_zero, add_zero, list.append_nil] at this, 
@@ -658,8 +668,19 @@ begin
     split_ifs, swap, { contradiction }, 
     unfold inc_𝕆_var,
     split_ifs, 
-    { simp at h_1,
-      push_neg at h_1,  }, sorry }, sorry
+    { rw FV_dec_𝕆_filter at h_1, simp at h_1, push_neg at h_1, rw FV_C_eq_FV at h_1,
+      rw O_right_left_swap, swap,
+      { apply or.inr,
+        refine ⟨h_1.1, h_1.2.2.1, h_1.2.1 𝕆, h_1.2.1 𝔹, _⟩, 
+        rcases h_1 with ⟨a, b, c, d⟩,
+        repeat { cases d }, all_goals { contradiction } },
+      have : list.filter (λ (yl_bl : var × lin_type), yl_bl.snd = 𝔹) yl_bls
+        = list.filter (λ (yl_bl : var × lin_type), yl_bl.snd = 𝔹) (yl_bls.concat (yr, 𝕆)),
+      { rw [list.concat_eq_append, list.filter_append, list.filter_cons_of_neg, list.filter_nil, list.append_nil], 
+        contradiction },
+      rw this,
+      apply yr_brs_ih,
+      simpa }, sorry }, sorry
 end
 
 theorem rc_insertion_correctness' {δ : program} {β : const → var → lin_type} {c : const}
