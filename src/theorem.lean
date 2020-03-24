@@ -366,23 +366,23 @@ section sandwich
       { assumption } 
     }, 
     any_goals { assumption },
-    { apply fn_body_wf.case,
-      { exact mem_insert_self h_x _ },
-      intros F F_in_Fs,
-      apply wf_sandwich _ _ (h_ih F F_in_Fs) (h_Fs_wf F F_in_Fs);
-      simp only [subset_iff, list.map_wf_eq_map, exists_prop, mem_join, mem_insert, list.mem_map, list.mem_to_finset], 
-      { intros x x_in_FV, 
-        apply or.inr,
-        use FV F, 
-        use F,
-        { exact ⟨F_in_Fs, rfl⟩ },
-        { assumption } },
-      { intros x h,
-        cases h,
-        { rwa h },
-        rcases h with ⟨S, ⟨⟨a, ⟨a_in_Fs, a_def⟩⟩, x_in_S⟩⟩,
-        rw ←a_def at x_in_S,
-        exact subset_iff.mp (FV_sub_wf_context (h_Fs_wf a a_in_Fs)) x_in_S } }
+    apply fn_body_wf.case,
+    { exact mem_insert_self h_x _ },
+    intros F F_in_Fs,
+    apply wf_sandwich _ _ (h_ih F F_in_Fs) (h_Fs_wf F F_in_Fs);
+    simp only [subset_iff, list.map_wf_eq_map, exists_prop, mem_join, mem_insert, list.mem_map, list.mem_to_finset], 
+    { intros x x_in_FV, 
+      apply or.inr,
+      use FV F, 
+      use F,
+      { exact ⟨F_in_Fs, rfl⟩ },
+      { assumption } },
+    { intros x h,
+      cases h,
+      { rwa h },
+      rcases h with ⟨S, ⟨⟨a, ⟨a_in_Fs, a_def⟩⟩, x_in_S⟩⟩,
+      rw ←a_def at x_in_S,
+      exact subset_iff.mp (FV_sub_wf_context (h_Fs_wf a a_in_Fs)) x_in_S }
   end
 
   lemma wf_FV_sandwich {β : const → var → lin_type} {δ : program} {Γ Γ' : finset var} {F : fn_body} 
@@ -569,7 +569,7 @@ def O_𝕆 (βₗ : var → lin_type) (F' : fn_body) (yl_bls yr_brs : list (var 
   .map (prod.fst ∘ list.context.x)
 
 lemma O_𝕆_left_concat {βₗ : var → lin_type} {F' : fn_body} {y_b : var × lin_type} {yl_bls yr_brs : list (var × lin_type)}
-  : y_b.2 = 𝕆 ∧ βₗ y_b.1 = 𝕆 ∧ (y_b.1 ∈ FV F' ∨ (y_b.1, 𝕆) ∈ yr_brs ∨ (y_b.1, 𝔹) ∈ yr_brs ∨ (y_b.1, 𝔹) ∈ yl_bls) ∧ (y_b.1, 𝔹) ∉ yl_bls
+  : y_b.2 = 𝕆 ∧ βₗ y_b.1 = 𝕆 ∧ (y_b.1 ∈ FV F' ∨ (y_b.1, 𝕆) ∈ yr_brs ∨ (y_b.1, 𝔹) ∈ yr_brs) ∧ (y_b.1, 𝔹) ∉ yl_bls
     → O_𝕆 βₗ F' (yl_bls.concat y_b) yr_brs = (O_𝕆 βₗ F' yl_bls yr_brs).concat y_b.1 :=
 begin
   rintro ⟨b_𝕆, y_𝕆, h, ni_𝔹⟩, unfold O_𝕆, 
@@ -581,12 +581,44 @@ begin
   rintros ⟨c2_𝕆, c1_𝕆, h'⟩, repeat { cases h' }, all_goals { tauto }
 end
 
+lemma O_𝕆_left_concat_elim {βₗ : var → lin_type} {F' : fn_body} {y_b : var × lin_type} {yl_bls yr_brs : list (var × lin_type)}
+  : (y_b.1, 𝕆) ∉ yl_bls ∧ (y_b.2 = 𝔹 ∨ βₗ y_b.1 = 𝔹 ∨ y_b.1 ∉ FV F' ∧ (y_b.1, 𝕆) ∉ yr_brs ∧ (y_b.1, 𝔹) ∉ yr_brs ∧ (y_b.1, 𝔹) ∉ yl_bls)
+    → O_𝕆 βₗ F' (yl_bls.concat y_b) yr_brs = O_𝕆 βₗ F' yl_bls yr_brs :=
+begin
+  intro h, unfold O_𝕆, 
+  rw list.contexts_concat, conv { to_lhs, congr, skip, congr, skip, rw list.concat_eq_append },
+  rw [list.filter_append, list.filter_cons_of_neg, list.filter_nil, list.append_nil, list.filter_of_map, list.map_map], swap, { finish },
+  unfold function.comp, rw list.filter_congr _, 
+  intros c c_context, split, swap, { finish },
+  have := list.mem_of_mem_contexts c_context,
+  cases c.x, cases snd; finish
+end
+
 def O (βₗ : var → lin_type) (F' : fn_body) (yl_bls yr_brs : list (var × lin_type)) : list var :=
 O_𝕆 βₗ F' yl_bls yr_brs ++ O_𝔹 βₗ yl_bls
 
 lemma O_left_concat {βₗ : var → lin_type} {F' : fn_body} {y_b : var × lin_type} {yl_bls yr_brs : list (var × lin_type)}
-  
-  : O βₗ F' (yl_bls.concat y_b) yr_brs = (O βₗ F' yl_bls yr_brs).concat y_b.1
+  : y_b.2 = 𝕆 ∧ (y_b.1 ∈ FV F' ∨ (y_b.1, 𝕆) ∈ yr_brs ∨ (y_b.1, 𝔹) ∈ yr_brs) ∧ (y_b.1, 𝕆) ∉ yl_bls ∧ (y_b.1, 𝔹) ∉ yl_bls
+    → (↑(O βₗ F' (yl_bls.concat y_b) yr_brs) : multiset var) = ↑((O βₗ F' yl_bls yr_brs).concat y_b.1) :=
+begin
+  rintro ⟨b_𝕆, h, ni_𝕆, ni_𝔹⟩, unfold O, 
+  by_cases h' : βₗ y_b.1 = 𝕆,
+  { rw [O_𝕆_left_concat ⟨b_𝕆, h', h, ni_𝔹⟩, O_𝔹_left_concat_elim (or.inr h')],
+    simp only [coe_eq_coe, list.concat_eq_append, list.append_assoc],
+    apply list.perm_app_right,
+    exact list.perm_app_comm },
+  { rw [←ne.def, not_𝕆_iff_𝔹] at h',
+    rw [O_𝔹_left_concat ⟨b_𝕆, h'⟩, O_𝕆_left_concat_elim ⟨ni_𝕆, or.inr (or.inl h')⟩],
+    simp }
+end
+
+lemma O_left_concat_elim {βₗ : var → lin_type} {F' : fn_body} {y_b : var × lin_type} {yl_bls yr_brs : list (var × lin_type)}
+  : (y_b.2 = 𝔹 ∨ βₗ y_b.1 = 𝕆) 
+    ∧ (y_b.1, 𝕆) ∉ yl_bls ∧ (y_b.2 = 𝔹 ∨ βₗ y_b.1 = 𝔹 ∨ y_b.1 ∉ FV F' ∧ (y_b.1, 𝕆) ∉ yr_brs ∧ (y_b.1, 𝔹) ∉ yr_brs ∧ (y_b.1, 𝔹) ∉ yl_bls)
+    → O βₗ F' (yl_bls.concat y_b) yr_brs = O βₗ F' yl_bls yr_brs :=
+begin
+  intro h, unfold O, rw [O_𝔹_left_concat_elim h.left, O_𝕆_left_concat_elim h.right]
+end
 
 lemma O_right_left_swap (βₗ : var → lin_type) (F' : fn_body) (y_b : var × lin_type) (yl_bls yr_brs : list (var × lin_type)) :
   y_b.2 = 𝔹 ∨ βₗ y_b.1 = 𝕆 ∧ y_b.1 ∉ FV F' ∧ (y_b.1, 𝕆) ∉ yr_brs ∧ (y_b.1, 𝔹) ∉ yr_brs ∧ (y_b.1, 𝔹) ∉ yl_bls →
@@ -666,6 +698,21 @@ def B (βₗ : var → lin_type) (F' : fn_body) (yl_bls : list (var × lin_type)
   yl_bl.x.2 = 𝔹 ∧ βₗ yl_bl.x.1 = 𝕆 ∧ yl_bl.x.1 ∉ FV F' ∧ (yl_bl.x.1, 𝔹) ∉ yl_bl.pre))
   .map (prod.fst ∘ list.context.x)
 
+lemma weird_lemma_to_avoid_touching_big_proof {δ : program} {β : const → var → lin_type} -- this lemma should be true i guess?
+  {e : expr} {Γ : list typed_var}
+  : (δ; β; Γ ⊩ e ∷ 𝕆) → (Γ.map typed_var.x).to_finset ⊆ FV_expr e :=
+begin
+  intro h,
+  rw finset.subset_iff,
+  intros x x_in_Γ,
+  rw [list.mem_to_finset, list.mem_map] at x_in_Γ,
+  rcases x_in_Γ with ⟨x_τ, x_τ_in_Γ, x_def⟩,
+  rw ←x_def at *, clear x_def x, cases x_τ with x τ, dsimp,
+  cases e,
+  { cases h, -- some weird error, not sure how to prove this
+   }
+end
+
 theorem C_app_rc_insertion_correctness {δ : program} {β : const → var → lin_type} {βₗ : var → lin_type}
   {y : var} {e : expr} {F : fn_body} {y𝕆 y𝔹 : multiset var} {Γ : list (var × lin_type)}
   (ih : ∀ (βₗ : var → lin_type),
@@ -693,7 +740,9 @@ begin
     assumption },
   intros yl_bls yr_brs Γ_def,
   induction yr_brs generalizing yl_bls,
-  { sorry },
+  { -- in the paper proof, this is the main body of work. i have not even started yet.
+    sorry
+   },
   cases yr_brs_hd with yr br,
   cases br,
   { unfold C_app,
@@ -715,11 +764,13 @@ begin
       simpa },
     { push_neg at h_1, rw FV_dec_𝕆_filter at h_1, simp [FV_C_eq_FV] at h_1, 
       apply linear.inc_𝕆,
-      { sorry },
+      { have := FV_sub_wf_context wf, -- not sure how to do this
+       },
       rw ←cons_add, rw ←add_cons, rw ←map_cons _ yr,
       have : cons yr ↑(O βₗ F yl_bls ((yr, 𝕆) :: yr_brs_tl)) = ↑(O βₗ F (yl_bls.concat (yr, 𝕆)) yr_brs_tl),
       { unfold O, rw [←coe_add, ←coe_add], 
-        have : O_𝕆 βₗ F yl_bls ((yr, 𝕆) :: yr_brs_tl) = O_𝕆 βₗ F yl_bls yr_brs_tl,
+        have : O_𝕆 βₗ F yl_bls ((yr, 𝕆) :: yr_brs_tl) = O_𝕆 βₗ F yl_bls yr_brs_tl, 
+        -- the above O lemmas should help with this mess, but i still haven't gotten around to proving all the variants for cons on the right side
         { /- unfold O_𝕆, congr' 1, apply list.filter_congr, intros c c_context,
           simp, split, swap, { /-tauto-/ sorry },
           rintro ⟨a, b, h'⟩, refine ⟨a, b, _⟩, repeat { cases h' }, any_goals { tauto },
